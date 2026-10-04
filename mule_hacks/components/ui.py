@@ -1,5 +1,8 @@
 """HTML-based Reflex components preserve the original CSS and semantics."""
 
+import os
+import json
+
 import reflex as rx
 from reflex_components_core.react_router.dom import ReactRouterLink
 
@@ -87,7 +90,15 @@ def conversation_art():
 
 
 def demo_script():
-    return rx.script(src="/demo.js")
+    return rx.fragment(api_config(), rx.script(src="/demo.js"))
+
+
+def api_config():
+    return rx.script(
+        "window.intersectApiBaseURL = "
+        + json.dumps(os.getenv("INTERSECT_API_URL", ""))
+        + ";"
+    )
 
 
 def overlays():

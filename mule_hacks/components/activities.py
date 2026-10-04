@@ -19,6 +19,11 @@ def daily_card(expanded=False):
                 icon("message-circle", 16), "Daily question", class_name="section-label"
             ),
             rx.el.h2("Loading today’s question…", id="daily-question-title"),
+            rx.el.label(
+                "Choose a question",
+                rx.el.select(id="daily-selector"),
+                class_name="activity-selector",
+            ),
             rx.el.form(
                 rx.el.label(
                     "Your anonymous answer",
@@ -60,6 +65,11 @@ def poll_card():
     return card(
         rx.el.span("Quick poll", class_name="section-label"),
         rx.el.h3("Loading the poll…", id="poll-title"),
+        rx.el.label(
+            "Choose a poll",
+            rx.el.select(id="poll-selector"),
+            class_name="activity-selector",
+        ),
         rx.el.div(
             id="poll-options",
             class_name="poll-options",

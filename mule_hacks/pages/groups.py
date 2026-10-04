@@ -1,7 +1,7 @@
 import reflex as rx
 
 from ..components.layout import shell
-from ..components.ui import icon, page_title
+from ..components.ui import button, icon, page_title
 
 
 def groups():
@@ -11,6 +11,8 @@ def groups():
             "Small circles. Shared interests.",
             "Find a space where the conversation comes naturally.",
         ),
+        button("Create a group/thread", action="propose-group", class_name="mb-6"),
+        rx.el.div(id="group-proposals", class_name="group-proposals"),
         rx.el.div(
             rx.el.p("Loading groups…", class_name="muted"),
             id="groups-grid",

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DemoProvider, DEMO_STORAGE_KEY} from '../../assets/services/demo-provider.mjs';
-import {assertAppData, prepareProvider, ProviderError, resultValidators} from '../../assets/services/contracts.mjs';
+import {assertAppData, assertPoll, prepareProvider, ProviderError, resultValidators} from '../../assets/services/contracts.mjs';
 import {createProvider} from '../../assets/services/provider.mjs';
 import {loadUiState, saveUiState, UI_STORAGE_KEY} from '../../assets/services/ui-state.mjs';
 
@@ -163,4 +163,31 @@ test('UI preference storage omits domain records and identities', () => {
     assert.equal(persisted.profile, undefined);
     assert.equal(loadUiState().activity, 'poll');
   } finally { globalThis.sessionStorage = original; }
+});
+
+test('backend activity collections allow empty lists and private polls without aggregates', async () => {
+  const value = await fixture().provider.load();
+  value.dailyQuestions = [value.daily, {...structuredClone(value.daily), id:'question-two'}];
+  const privatePoll = {...structuredClone(value.poll), id:'private-poll', resultsPublic:false, totalVotes:null};
+  privatePoll.choices.forEach(c => { c.percent = null; });
+  value.polls = [value.poll, privatePoll];
+  value.groupProposals = [];
+  delete value.daily; delete value.poll;
+  assertAppData(value);
+  value.dailyQuestions = []; value.polls = [];
+  assertAppData(value);
+  assert.throws(() => assertPoll({...privatePoll, totalVotes:1}), ProviderError);
+  privatePoll.choices[0].count = 1;
+  assert.throws(() => assertPoll(privatePoll), ProviderError);
+});
+
+test('default production provider reports an unavailable backend without fabricated fallback', async () => {
+  const previousWindow = global.window, previousFetch = global.fetch;
+  let reads = 0;
+  global.window = {location:{assign:()=>{}},intersectApiBaseURL:''};
+  global.fetch = async () => { reads++; throw new Error('offline'); };
+  try {
+    await assert.rejects(() => createProvider(), ProviderError);
+    assert.equal(reads,1);
+  } finally { global.window = previousWindow; global.fetch = previousFetch; }
 });

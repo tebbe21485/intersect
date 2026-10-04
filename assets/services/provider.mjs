@@ -1,13 +1,12 @@
-/** The single integration point for a future Reflex/Python or HTTP provider. */
+/** The production provider uses authenticated Reflex/Python HTTP routes. */
 import {prepareProvider} from './contracts.mjs';
 
 export async function createProvider() {
-  // A host can supply a provider factory before demo.js runs. When integrating,
-  // replace this selection with an import of the real provider. Never fall back
-  // to demo data if an explicitly selected provider fails.
+  // Explicit injection is available for isolated fixtures/tests. Neither an
+  // injected nor the default backend provider falls back to demo records.
   if (typeof window.intersectProviderFactory === 'function') {
     return prepareProvider(await window.intersectProviderFactory());
   }
-  const {createDemoProvider} = await import('./demo-provider.mjs');
-  return prepareProvider(await createDemoProvider());
+  const {createBackendProvider} = await import('./backend-provider.mjs');
+  return prepareProvider(await createBackendProvider());
 }

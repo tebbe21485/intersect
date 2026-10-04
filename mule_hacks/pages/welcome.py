@@ -20,14 +20,14 @@ def welcome():
                     class_name="muted",
                 ),
                 link(
-                    "Enter Intersect",
+                    "Sign in",
                     icon("arrow-right", 18),
-                    href="/",
+                    href="/login",
                     class_name="btn primary",
                 ),
                 rx.el.span(
                     icon("lock-keyhole", 14),
-                    "Mock login · No account needed",
+                    "Your identity stays private until you choose to share it",
                     class_name="welcome-note",
                 ),
                 class_name="welcome-copy",

@@ -1,6 +1,6 @@
 /* Intersect presentation and UI events.
  * All domain reads/writes go through services/provider.mjs. The default provider
- * is local demo data; a future backend can implement the same async contract.
+ * uses the authenticated Reflex/Python backend.
  * Only UI preferences are persisted here. Rendered user content is escaped.
  */
 (async () => {
@@ -10,10 +10,16 @@
     document.documentElement.dataset.demoReady = 'true';
     return;
   }
+  if (document.querySelector('[data-page="admin"]')) {
+    document.getElementById('data-status').hidden = true;
+    return;
+  }
   const {createProvider} = await import('/services/provider.mjs');
   const {loadUiState, saveUiState} = await import('/services/ui-state.mjs');
   const ui = loadUiState();
   let data = null, provider = null, pending = false;
+  let revision = 0, refreshing = false;
+  const answerDrafts = new Map();
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
   const escape = (value = '') => String(value).replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char]));
@@ -41,12 +47,19 @@
   const avatar = (alias, color = 'blue', small = false) => `<span class="avatar ${escape(color)} ${small ? 'small' : ''}" aria-hidden="true">${escape(alias[0])}</span>`;
   const button = (label, action, extra = '', variant = 'primary', classes = '') => `<button type="button" class="btn ${variant} ${classes}" data-action="${action}" ${extra}>${label}</button>`;
   const name = c => c.reveal === 'revealed' ? c.identity : c.alias;
+  const newRequestId = () => crypto.randomUUID?.() || [...crypto.getRandomValues(new Uint8Array(16))].map(n => n.toString(16).padStart(2,'0')).join('');
+  const displayTime = value => {
+    const parsed = new Date(/^\d{4}-\d{2}-\d{2} \d{2}:/.test(value) ? value.replace(' ', 'T') + 'Z' : value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return new Intl.DateTimeFormat(undefined, {hour:'numeric',minute:'2-digit',...(parsed.toDateString() === new Date().toDateString() ? {} : {month:'short',day:'numeric'})}).format(parsed);
+  };
   const active = () => data.connections.find(c => c.id === ui.activeId);
   const persist = () => saveUiState(ui);
   const replaceRecord = (records, record) => records.map(item => item.id === record.id ? record : item);
   async function runOperation(operation) {
     if (pending || !data) return;
     pending = true;
+    revision++;
     const controls = $$('button, form input, form textarea, form select').map(control => [control, control.disabled]);
     controls.forEach(([control]) => { control.disabled = true; });
     $('[data-page]')?.setAttribute('aria-busy', 'true');
@@ -92,8 +105,26 @@
     persist();
   }
   function renderAnswer() {
+    $$('[data-action="similar-answer"]').forEach(el => { el.hidden = provider.capabilities.automaticMatching === false; });
+    if (!data.daily) {
+      if ($('#daily-question-title')) $('#daily-question-title').textContent = 'No active questions yet.';
+      if ($('#daily-form')) $('#daily-form').hidden = true;
+      if ($('#daily-selector')) $('#daily-selector').parentElement.hidden = true;
+      if ($('#daily-responses')) $('#daily-responses').innerHTML = '<p class="muted">An admin will publish questions here.</p>';
+      if ($('#your-answer-card')) $('#your-answer-card').hidden = true;
+      return;
+    }
+    if ($('#daily-form')) $('#daily-form').hidden = false;
+    if ($('#daily-selector')) {
+      $('#daily-selector').parentElement.hidden = data.dailyQuestions.length < 2;
+      $('#daily-selector').innerHTML = data.dailyQuestions.map(q => `<option value="${escape(q.id)}" ${q.id === data.daily.id ? 'selected' : ''}>${escape(q.text)}${q.status === 'closed' ? ' (closed)' : ''}</option>`).join('');
+    }
     if ($('#daily-question-title')) $('#daily-question-title').textContent = data.daily.text;
-    if ($('#daily-response')) $('#daily-response').value = data.daily.answer;
+    if ($('#daily-response')) {
+      $('#daily-response').value = answerDrafts.get(data.daily.id) ?? data.daily.answer;
+      $('#daily-response').disabled = data.daily.status === 'closed';
+      $('#daily-form button').disabled = data.daily.status === 'closed';
+    }
     if ($('#daily-submit-label')) $('#daily-submit-label').textContent = data.daily.answer ? 'Update answer' : 'Share anonymously';
     if ($('#submitted-answer')) {
       $('#submitted-answer').textContent = `“${data.daily.answer}”`;
@@ -103,9 +134,22 @@
     if ($('#your-answer-card')) $('#your-answer-card').hidden = !data.daily.answer;
     if ($('#daily-responses')) $('#daily-responses').innerHTML = data.daily.responses.map(response => `<section class="card answer-card">
       ${avatar(response.alias, response.color)}<div><strong>${escape(response.alias)}</strong><p>${escape(response.text)}</p><span class="tag">${escape(response.interest)}</span></div>
-      ${button(`Connect ${icon('arrow-right')}`, 'connect', `data-response-id="${escape(response.id)}"` , 'secondary')}</section>`).join('');
+      ${button(`Connect ${icon('arrow-right')}`, 'connect', `data-response-id="${escape(response.id)}"` , 'secondary')}</section>`).join('') || '<p class="muted">No other responses yet. Share your perspective to get things started.</p>';
+    $$('[data-action="similar-answer"]').forEach(el => { el.hidden = provider.capabilities.automaticMatching === false; });
   }
   function renderPoll() {
+    if (!data.poll) {
+      if ($('#poll-title')) $('#poll-title').textContent = 'No active polls yet.';
+      if ($('#poll-options')) $('#poll-options').innerHTML = '';
+      if ($('#poll-note')) $('#poll-note').textContent = 'An admin will publish polls here.';
+      if ($('#poll-selector')) $('#poll-selector').parentElement.hidden = true;
+      if ($('#poll-match')) $('#poll-match').hidden = true;
+      return;
+    }
+    if ($('#poll-selector')) {
+      $('#poll-selector').parentElement.hidden = data.polls.length < 2;
+      $('#poll-selector').innerHTML = data.polls.map(p => `<option value="${escape(p.id)}" ${p.id === data.poll.id ? 'selected' : ''}>${escape(p.question)}${p.status === 'closed' ? ' (closed)' : ''}</option>`).join('');
+    }
     if ($('#poll-title')) $('#poll-title').textContent = data.poll.question;
     if ($('#poll-options')) $('#poll-options').innerHTML = data.poll.choices.map(choice => `<button type="button" class="poll-option" data-action="vote" data-choice="${escape(choice.id)}" data-percent="${choice.percent}" aria-pressed="false"><span class="poll-fill"></span><span class="relative flex items-center gap-3"><span class="radio"></span>${icon(choice.icon, 17)}${escape(choice.text)}</span><strong class="relative text-xs" hidden>${choice.percent}%</strong></button>`).join('');
     $$('[data-action="vote"]').forEach(option => {
@@ -113,14 +157,22 @@
       option.classList.toggle('selected', selected);
       option.classList.toggle('voted', data.poll.vote !== null);
       option.setAttribute('aria-pressed', selected);
-      option.querySelector('.poll-fill').style.width = data.poll.vote === null ? '0%' : `${option.dataset.percent}%`;
-      option.querySelector('strong').hidden = data.poll.vote === null;
+      option.querySelector('.poll-fill').style.width = data.poll.vote === null || data.poll.resultsPublic === false ? '0%' : `${option.dataset.percent}%`;
+      option.querySelector('strong').hidden = data.poll.vote === null || data.poll.resultsPublic === false;
       option.querySelector('.radio').innerHTML = selected ? icon('check', 11) : '';
+      option.disabled = data.poll.status === 'closed';
     });
-    if ($('#poll-note')) $('#poll-note').textContent = data.poll.vote === null ? 'One choice. A little common ground.' : `${data.poll.totalVotes} votes`;
-    if ($('#poll-match')) $('#poll-match').hidden = data.poll.vote === null;
+    if ($('#poll-note')) $('#poll-note').textContent = data.poll.resultsPublic === false ? (data.poll.vote ? 'Your vote is saved. Results are private.' : 'Results are private. Your choice stays anonymous.') : (data.poll.vote === null ? 'One choice. A little common ground.' : `${data.poll.totalVotes} votes`);
+    if ($('#poll-match')) $('#poll-match').hidden = data.poll.vote === null || provider.capabilities.automaticMatching === false;
   }
   function updateCounts() { $$('[data-connection-count]').forEach(el => { el.textContent = data.connections.length; }); }
+  function renderChallenge() {
+    if (!$('#challenge-title')) return;
+    $('#challenge-title').textContent = data.completed ? 'Curiosity, rewarded.' : 'Let curiosity lead.';
+    $('#challenge-description').textContent = data.completed ? 'You started a conversation with a new perspective. That’s how connection begins.' : 'Start a conversation with someone whose answer surprised you.';
+    $('#challenge-progress').style.width = data.completed ? '100%' : '0%';
+    $('#challenge-count').textContent = `${Number(data.completed)} of 1`;
+  }
   function renderConnections() {
     const grid = $('#connections-grid');
     if (!grid) return;
@@ -150,6 +202,13 @@
   function renderChat(preserveDraft = false) {
     if (!$('#chat-content')) return;
     const draft = preserveDraft ? ($('[data-form="message"] input')?.value || '') : '';
+    const oldInput = $('[data-form="message"] input');
+    const focused = preserveDraft && document.activeElement === oldInput;
+    const selection = focused ? [oldInput.selectionStart, oldInput.selectionEnd] : null;
+    const requestId = preserveDraft ? $('[data-form="message"]')?.dataset.requestId : null;
+    const oldMessages = $('.chat-messages');
+    const scrollTop = oldMessages?.scrollTop || 0;
+    const atBottom = !oldMessages || oldMessages.scrollHeight - oldMessages.scrollTop - oldMessages.clientHeight < 60;
     const c = active();
     $('.app-shell').classList.toggle('has-active-chat', !!c);
     $('.messaging-layout').classList.toggle('chat-selected', !!c);
@@ -163,18 +222,22 @@
       <button type="button" class="icon-button mobile-back" data-action="back-messages" aria-label="Back to messages">${icon('arrow-left', 20)}</button>
       ${avatar(c.alias, c.color, true)}<div><h3>${escape(name(c))}</h3><span class="muted text-xs">${c.reveal === 'revealed' ? 'Identity mutually revealed' : 'Anonymous connection'}</span></div><span class="chat-status"><span></span>Here to connect</span>
       </header><div class="chat-context">${icon('lock', 14)}${c.reveal === 'revealed' ? 'You both agreed to share your identities.' : `Connected through ${escape(c.source.toLowerCase())} · ${escape(c.shared)}`}</div>
-      <div class="chat-messages" role="log" aria-label="Conversation messages" aria-live="polite"><p class="chat-date">This is the beginning of something good</p>${c.messages.map(m => `<div class="message ${m.from === 'me' ? 'me' : 'them'}"><p>${escape(m.text)}</p><span>${m.from === 'me' ? 'You' : escape(name(c))} · ${escape(m.time)}</span></div>`).join('')}</div>
+      <div class="chat-messages" role="log" aria-label="Conversation messages" aria-live="polite">${c.hasOlderMessages ? button('Load earlier messages', 'older-messages', '', 'secondary') : ''}<p class="chat-date">This is the beginning of something good</p>${c.messages.map(m => `<div class="message ${m.from === 'me' ? 'me' : 'them'}"><p>${escape(m.text)}</p><span>${m.from === 'me' ? 'You' : escape(name(c))} · ${escape(displayTime(m.time))}</span></div>`).join('')}</div>
       <div class="chat-bottom">${visibleStarters.length ? `<section class="suggested-starters" aria-label="Suggested conversation starters"><div class="starter-heading"><span>Try a little curiosity</span><button type="button" class="icon-button" data-action="dismiss-all" aria-label="Dismiss suggested prompts">${icon('x', 18)}</button></div><div class="starter-row">${visibleStarters.map(prompt => `<span class="starter-chip"><button type="button" data-action="starter" data-prompt="${escape(prompt)}">${escape(prompt)}</button><button type="button" class="starter-dismiss" data-action="dismiss-starter" data-prompt="${escape(prompt)}" aria-label="Dismiss prompt: ${escape(prompt)}">${icon('x')}</button></span>`).join('')}</div></section>` : '<button type="button" class="suggestion-toggle" data-action="show-starters">Show conversation starters</button>'}
       <form class="message-form" data-form="message"><input name="message" aria-label="Message" placeholder="Write a thoughtful hello…" maxlength="1000" autocomplete="off" required/><button class="btn primary" type="submit" aria-label="Send message" disabled>${icon('send', 18)}</button></form>
       <div class="chat-controls"><button type="button" class="chat-action unlock-action" data-action="unlock">${icon('lock', 14)}${c.reveal === 'revealed' ? 'Identity revealed' : c.reveal === 'waiting' ? 'Waiting for other person' : 'Request identity unlock'}</button>
       <button type="button" class="chat-action" data-action="end">${icon('logout', 14)}End conversation</button><button type="button" class="chat-action" data-action="report">${icon('flag', 14)}Report / block</button></div></div>`;
+    if (provider.capabilities.backend) $('.chat-controls').insertAdjacentHTML('beforeend', `<button type="button" class="chat-action" data-action="share-phone">${c.phoneShared ? 'Stop sharing my phone' : 'Share my phone number'}</button>${c.phone ? `<p class="phone-note">${escape(name(c))} shared their phone: ${escape(c.phone)}</p>` : ''}`);
     const messages = $('.chat-messages');
     $('[data-form="message"] input').value = draft;
     $('[data-form="message"] button').disabled = !draft.trim();
-    messages.scrollTop = messages.scrollHeight;
+    if (requestId) $('[data-form="message"]').dataset.requestId = requestId;
+    messages.scrollTop = !preserveDraft || atBottom ? messages.scrollHeight : scrollTop;
+    if (focused) { const input = $('[data-form="message"] input'); input.focus({preventScroll:true}); input.setSelectionRange(...selection); }
   }
   let currentGroup, currentQuestion, filter = 'All';
   function renderGroups() {
+    if ($('#group-proposals')) $('#group-proposals').innerHTML = (data.groupProposals || []).map(g => `<section class="card proposal-row"><strong>${escape(g.name)}</strong><p class="muted">${escape(g.approval)} · ${escape(g.status)}${g.decisionReason ? ' · ' + escape(g.decisionReason) : ''}</p>${button('Edit and resubmit for approval', 'edit-group', `data-id="${escape(g.id)}"`, 'secondary')}</section>`).join('');
     if (!$('#groups-grid')) return;
     $('#groups-grid').innerHTML = data.groups.map(group => `<button type="button" class="group-tile ${escape(group.color)} detailed" data-action="group" data-id="${escape(group.id)}"><span class="group-icon ${escape(group.color)}">${icon(group.icon, 25)}</span><span class="min-w-0 text-left"><strong>${escape(group.name)}</strong><span class="group-description">${escape(group.description)}</span><span class="group-size">${icon('users', 12)}${group.size} members · ${escape(group.activity)}</span></span><span class="group-arrow">${icon('chevron-right')}</span></button>`).join('') || '<p class="muted">There are no groups to join yet.</p>';
   }
@@ -187,7 +250,7 @@
   }
   function renderQuestions() {
     if (!$('#question-list')) return;
-    $('#question-list').innerHTML = data.questions.filter(q => filter === 'All' || q.category === filter).map(q => `<button type="button" class="card question-row" data-action="question" data-id="${escape(q.id)}"><div class="flex gap-2 items-center text-xs"><span class="tag">${escape(q.category)}</span><span class="muted">${escape(q.alias)} · ${escape(q.time)}</span></div><h3>${escape(q.text)}</h3><p>${escape(q.detail)}</p><span class="text-link mt-5">${icon('message', 15)}${q.responses.length} responses ${icon('arrow-right', 15)}</span></button>`).join('') || '<p class="muted">No questions in this category yet.</p>';
+    $('#question-list').innerHTML = data.questions.filter(q => filter === 'All' || q.category === filter).map(q => `<button type="button" class="card question-row" data-action="question" data-id="${escape(q.id)}"><div class="flex gap-2 items-center text-xs"><span class="tag">${escape(q.category)}</span><span class="muted">${escape(q.alias)} · ${escape(displayTime(q.time))}</span></div><h3>${escape(q.text)}</h3><p>${escape(q.detail)}</p><span class="text-link mt-5">${icon('message', 15)}${q.responses.length} responses ${icon('arrow-right', 15)}</span></button>`).join('') || '<p class="muted">No questions in this category yet.</p>';
     if ($('#question-filters')) $('#question-filters').innerHTML = ['All', ...data.categories].map(category => `<button type="button" data-action="filter" data-category="${escape(category)}">${escape(category)}</button>`).join('');
     $$('[data-action="filter"]').forEach(el => { const selected = el.dataset.category === filter; el.classList.toggle('active', selected); el.setAttribute('aria-pressed', selected); });
   }
@@ -201,8 +264,11 @@
     const c = active();
     showModal(c.reveal === 'revealed' ? 'A connection, with a name.' : 'Your identity. Your choice.',
       `<div class="unlock-symbol">${icon('lock', 30)}</div><p class="unlock-explanation">Both people must choose to reveal their identity.</p><p class="muted text-sm text-center">Your name stays hidden until you both agree. You can keep talking anonymously for as long as you like.</p>
-      <div class="consent-row"><span>${avatar(data.profile.alias, 'blue', true)}You</span><span>${c.reveal ? '✓ Agreed to reveal' : 'Identity hidden'}</span></div><div class="consent-row"><span>${avatar(c.alias, c.color, true)}${escape(c.alias)}</span><span>${c.reveal === 'revealed' ? '✓ Agreed to reveal' : 'Identity hidden'}</span></div>
-      ${!c.reveal ? button(`Request Unlock ${icon('arrow-right')}`, 'request-unlock', '', 'primary', 'w-full mt-5') : c.reveal === 'waiting' ? `<div class="waiting-state">Waiting for Other Person</div>${provider.capabilities.simulateIdentityConsent ? `<div class="demo-control"><p>Demo control · Play the other person’s side</p>${button(`Simulate their consent ${icon('check')}`, 'consent', '', 'secondary')}</div>` : ''}<button type="button" class="text-link mx-auto mt-4" data-action="cancel-unlock">Cancel my request</button>` : `<div class="revealed-card">${icon('check', 23)}<strong>Identity Revealed</strong><p>You’re ${escape(data.profile.name)}. Meet ${escape(c.identity)}.</p><span>Same conversation. A little more familiar.</span></div>`}`);
+      <div class="consent-row"><span>${avatar(data.profile.alias, 'blue', true)}You</span><span>${c.reveal ? '✓ Agreed to reveal' : 'Identity hidden'}</span></div><div class="consent-row"><span>${avatar(c.alias, c.color, true)}${escape(c.alias)}</span><span>${c.peerConsent || c.reveal === 'revealed' ? '✓ Agreed to reveal' : 'Identity hidden'}</span></div>
+      ${!c.reveal ? button(`Request Unlock ${icon('arrow-right')}`, 'request-unlock', '', 'primary', 'w-full mt-5') : c.reveal === 'waiting' ? `<div class="waiting-state">Waiting for Other Person</div>${provider.capabilities.simulateIdentityConsent ? `<div class="demo-control"><p>Demo control · Play the other person’s side</p>${button(`Simulate their consent ${icon('check')}`, 'consent', '', 'secondary')}</div>` : ''}<button type="button" class="text-link mx-auto mt-4" data-action="cancel-unlock">Cancel my request</button>` : `<div class="revealed-card">${icon('check', 23)}<strong>Identity Revealed</strong><p>You’re ${escape(data.profile.name)}. Meet ${escape(c.identity)}.</p>${c.identityDetails?.linkedin?.startsWith('https://') ? `<a class="text-link" href="${escape(c.identityDetails.linkedin)}" target="_blank" rel="noopener noreferrer">LinkedIn profile</a>` : ''}<span>Phone numbers are shared separately.</span></div>`}`);
+  }
+  function groupForm(record) {
+    showModal(record ? 'Edit group/thread proposal' : 'Create a group/thread', `<p class="muted">An admin reviews proposals before they appear in the community.</p><form class="form-stack mt-5" data-form="proposal" data-id="${escape(record?.id || '')}"><label>Group name<input name="name" required maxlength="100" value="${escape(record?.name || '')}"/></label><label>Description<textarea name="description" maxlength="800">${escape(record?.description || '')}</textarea></label><button type="submit" class="btn primary">Submit for approval</button></form>`);
   }
   async function removeConnection(method, message, reason) {
     const connectionId = ui.activeId;
@@ -218,7 +284,7 @@
     if (!data || pending) return;
     switch (d.action) {
       case 'activity': setActivity(d.activity); break;
-      case 'vote': runOperation(async () => { data.poll = await provider.voteOnPoll({pollId: data.poll.id, choiceId: d.choice}); renderPoll(); }); break;
+      case 'vote': runOperation(async () => { data.poll = await provider.voteOnPoll({pollId: data.poll.id, choiceId: d.choice}); data.polls = replaceRecord(data.polls, data.poll); renderPoll(); }); break;
       case 'poll-match': if (data.poll.vote !== null) runOperation(() => connect({kind: 'poll', pollId: data.poll.id})); break;
       case 'similar-answer': runOperation(() => connect({kind: 'similar-answer', questionId: data.daily.id})); break;
       case 'connect': runOperation(() => connect(d.questionId ? {kind: 'question-response', questionId: d.questionId, responseId: d.responseId} : {kind: 'daily-answer', questionId: data.daily.id, responseId: d.responseId})); break;
@@ -226,7 +292,9 @@
       case 'select-chat': closeModal(); ui.activeId = d.id; persist(); renderChat(); break;
       case 'back-messages': ui.activeId = null; persist(); renderChat(); break;
       case 'close-modal': closeModal(); break;
-      case 'profile': showModal(`Hello, ${data.profile.alias}.`, `<div class="flex items-center gap-4 my-6">${avatar(data.profile.alias)}<div><strong>${escape(data.profile.name)}</strong><p class="muted text-sm">Your anonymous alias is ${escape(data.profile.alias)}.</p></div></div><p class="muted text-sm mb-6">Your identity is only shown to a connection after mutual consent.</p><a class="btn secondary" href="/welcome">${icon('logout')}View welcome</a>`); break;
+      case 'profile': if (provider.capabilities.backend) location.assign('/profile'); else showModal(`Hello, ${data.profile.alias}.`, `<p>${escape(data.profile.name)}</p>`); break;
+      case 'propose-group': groupForm(); break;
+      case 'edit-group': groupForm(data.groupProposals.find(g => g.id === d.id)); break;
       case 'group': showGroup(d.id); break;
       case 'join-group': runOperation(async () => { const group = await provider.joinGroup({groupId: currentGroup.id}); data.groups = replaceRecord(data.groups, group); renderGroups(); showGroup(group.id); }); break;
       case 'filter': filter = d.category; renderQuestions(); break;
@@ -237,6 +305,9 @@
       case 'dismiss-all': ui.dismissed[ui.activeId] = [...starters]; persist(); renderChat(true); break;
       case 'show-starters': ui.dismissed[ui.activeId] = []; persist(); renderChat(true); break;
       case 'unlock': showUnlock(); break;
+      case 'share-phone': showModal('Share your phone number?', `<p class="muted my-4">${active().phoneShared ? 'Stop sharing your phone number in this conversation.' : `Share your phone number only with ${escape(name(active()))}. They can save it once you share it.`}</p>${button(active().phoneShared ? 'Stop sharing' : 'Share my number', 'confirm-phone')}`); break;
+      case 'confirm-phone': runOperation(async () => { const c = await provider.sharePhone({connectionId:ui.activeId,share:!active().phoneShared}); data.connections = replaceRecord(data.connections,c); closeModal(); renderChat(true); }); break;
+      case 'older-messages': runOperation(async () => { const c = active(); const older = await provider.loadOlderMessages({connectionId:c.id,before:c.messages[0].id}); c.messages = [...older,...c.messages]; c.hasOlderMessages = older.length === 100; renderChat(true); }); break;
       case 'request-unlock': runOperation(async () => { const connection = await provider.requestIdentityReveal({connectionId: ui.activeId}); data.connections = replaceRecord(data.connections, connection); renderChat(true); showUnlock(); }); break;
       case 'consent': if (provider.capabilities.simulateIdentityConsent) runOperation(async () => { const connection = await provider.simulateIdentityConsent({connectionId: ui.activeId}); data.connections = replaceRecord(data.connections, connection); renderChat(true); showUnlock(); }); break;
       case 'cancel-unlock': runOperation(async () => { const connection = await provider.cancelIdentityReveal({connectionId: ui.activeId}); data.connections = replaceRecord(data.connections, connection); renderChat(true); showUnlock(); }); break;
@@ -257,13 +328,17 @@
     switch (form.dataset.form) {
       case 'daily':
         if (!value('answer')) return;
-        runOperation(async () => { data.daily = await provider.saveDailyAnswer({questionId: data.daily.id, text: value('answer')}); renderAnswer(); notify('Your answer has been shared anonymously.'); }); break;
+        runOperation(async () => { data.daily = await provider.saveDailyAnswer({questionId: data.daily.id, text: value('answer')}); data.dailyQuestions = replaceRecord(data.dailyQuestions,data.daily); answerDrafts.delete(data.daily.id); renderAnswer(); notify('Your answer has been shared anonymously.'); }); break;
       case 'message':
         if (!value('message') || !active()) return;
-        runOperation(async () => { const connection = await provider.sendMessage({connectionId: ui.activeId, text: value('message')}); data.connections = replaceRecord(data.connections, connection); renderChat(); $('[data-form="message"] input').focus(); }); break;
+        form.dataset.requestId ||= newRequestId();
+        runOperation(async () => { const connection = await provider.sendMessage({connectionId: ui.activeId, text: value('message'),requestId:form.dataset.requestId}); data.connections = replaceRecord(data.connections, connection); renderChat(); $('[data-form="message"] input').focus(); }); break;
       case 'group':
         if (!value('message') || !currentGroup.joined) return;
-        runOperation(async () => { const group = await provider.sendGroupMessage({groupId: currentGroup.id, text: value('message')}); data.groups = replaceRecord(data.groups, group); showGroup(group.id); $('[data-form="group"] input').focus(); }); break;
+        form.dataset.requestId ||= newRequestId();
+        runOperation(async () => { const group = await provider.sendGroupMessage({groupId: currentGroup.id, text: value('message'),requestId:form.dataset.requestId}); data.groups = replaceRecord(data.groups, group); showGroup(group.id); $('[data-form="group"] input').focus(); }); break;
+      case 'proposal':
+        runOperation(async () => { const proposal = await provider[form.dataset.id ? 'editGroupProposal' : 'proposeGroup']({name:value('name'),description:value('description'),...(form.dataset.id ? {groupId:form.dataset.id} : {})}); data.groupProposals = [proposal,...data.groupProposals.filter(g => g.id !== proposal.id)]; data.groups = data.groups.filter(g => g.id !== proposal.id); renderGroups(); closeModal(); notify('Your group proposal is waiting for admin approval.'); }); break;
       case 'question':
         if (!value('title')) return;
         runOperation(async () => { const question = await provider.postQuestion({category: value('category'), text: value('title'), detail: value('detail')}); data.questions = [question, ...data.questions]; filter = 'All'; renderQuestions(); closeModal(); notify('Your question is on the board.'); }); break;
@@ -274,9 +349,13 @@
   });
   document.addEventListener('input', event => {
     if (event.target.matches('[data-form="message"] input')) $('[data-form="message"] button').disabled = !event.target.value.trim();
+    if (event.target.closest('[data-form="message"], [data-form="group"]')) delete event.target.closest('form').dataset.requestId;
+    if (event.target.id === 'daily-response' && data?.daily) answerDrafts.set(data.daily.id,event.target.value);
   });
   document.addEventListener('change', event => {
     if (event.target.id === 'community') { ui.community = event.target.value; persist(); }
+    if (event.target.id === 'daily-selector') { ui.dailyId = event.target.value; selectActivities(); renderAnswer(); persist(); revision++; }
+    if (event.target.id === 'poll-selector') { ui.pollId = event.target.value; selectActivities(); renderPoll(); persist(); revision++; }
   });
   document.addEventListener('keydown', event => {
     if (!event.target.matches('[data-action="activity"]')) return;
@@ -302,9 +381,15 @@
     try {
       provider ||= await createProvider();
       data = await provider.load();
+      if (ui.viewerId !== data.profile.id) {
+        ui.activeId = undefined; ui.dismissed = {}; ui.dailyId = undefined; ui.pollId = undefined; ui.notice = ''; answerDrafts.clear();
+      }
+      ui.viewerId = data.profile.id;
+      selectActivities();
       if (ui.activeId === undefined || (ui.activeId !== null && !active())) ui.activeId = data.connections[0]?.id || null;
       renderAnswer(); renderPoll(); renderConnections(); renderQuestions(); renderGroups(); renderChat(); updateCounts();
       if ($('.profile-button')) $('.profile-button').innerHTML = avatar(data.profile.alias, 'blue', true);
+      if (data.profile.role === 'admin' && $('.sidebar') && !$('.admin-link')) $('.sidebar').insertAdjacentHTML('beforeend','<a href="/admin" class="nav-item admin-link">Manage community</a>');
       if ($('#community')) $('#community').value = ui.community;
       if ($('#activity-daily')) setActivity(ui.activity);
       if ($('#challenge-title')) {
@@ -325,7 +410,82 @@
       $('[data-page]')?.setAttribute('aria-busy', 'false');
     }
   }
+  function selectActivities() {
+    data.dailyQuestions ||= data.daily ? [data.daily] : [];
+    data.polls ||= data.poll ? [data.poll] : [];
+    data.daily = data.dailyQuestions.find(q => q.id === ui.dailyId) || data.dailyQuestions[0] || null;
+    data.poll = data.polls.find(p => p.id === ui.pollId) || data.polls[0] || null;
+    ui.dailyId = data.daily?.id; ui.pollId = data.poll?.id;
+  }
+  function refreshModal(render) {
+    const requestId = $('#modal-body form')?.dataset.requestId;
+    const modalScroll = $('#demo-modal').scrollTop;
+    const values = [...$('#modal-body').querySelectorAll('input,textarea,select')].map(el => [el.name,el.value]);
+    const focused = document.activeElement;
+    const selection = focused?.matches('input,textarea') ? [focused.selectionStart,focused.selectionEnd] : null;
+    const focusName = focused?.name;
+    const focusAction = focused?.dataset.action;
+    render();
+    for (const [name,value] of values) { const el = $('#modal-body').querySelector(`[name="${name}"]`); if (el) el.value = value; }
+    if (requestId && $('#modal-body form')) $('#modal-body form').dataset.requestId = requestId;
+    $('#demo-modal').scrollTop = modalScroll;
+    const next = focusName && $('#modal-body').querySelector(`[name="${focusName}"]`);
+    if (next) { next.focus({preventScroll:true}); if (selection && next.setSelectionRange) next.setSelectionRange(...selection); }
+    else if (focusAction) $('#modal-body').querySelector(`[data-action="${focusAction}"]`)?.focus({preventScroll:true});
+  }
+  async function refresh() {
+    if (!data || pending || refreshing || document.hidden || !provider.capabilities.backend) return;
+    refreshing = true;
+    const before = revision;
+    try {
+      const cursors = Object.fromEntries(data.connections.slice(0,100).filter(c => c.messages.length).map(c => [c.id,c.messages.at(-1).id]));
+      const next = await provider.load({afterMessages:cursors});
+      if (before !== revision || pending) return;
+      if (next.profile.id !== data.profile.id) { location.reload(); return; }
+      const previous = data;
+      // Keep explicitly loaded older history while refreshing the current tail.
+      for (const connection of next.connections) {
+        const old = previous.connections.find(c => c.id === connection.id);
+        if (old && connection.incremental) {
+          const existing = new Set(old.messages.map(m => m.id));
+          connection.messages = [...old.messages,...connection.messages.filter(m => !existing.has(m.id))];
+          connection.hasOlderMessages = old.hasOlderMessages;
+        } else if (old?.messages.length > 100 && connection.messages.length) {
+          connection.messages = [...old.messages.filter(m => Number(m.id) < Number(connection.messages[0].id)), ...connection.messages];
+          connection.hasOlderMessages = old.hasOlderMessages;
+        }
+        connection.incremental = false;
+      }
+      data = next; selectActivities();
+      if (JSON.stringify(previous.daily) !== JSON.stringify(data.daily)) renderAnswer();
+      if (JSON.stringify(previous.poll) !== JSON.stringify(data.poll)) renderPoll();
+      if (JSON.stringify(previous.connections) !== JSON.stringify(data.connections)) { renderConnections(); renderChat(true); updateCounts(); }
+      if (JSON.stringify(previous.groups) !== JSON.stringify(data.groups) || JSON.stringify(previous.groupProposals) !== JSON.stringify(data.groupProposals)) renderGroups();
+      if (JSON.stringify(previous.questions) !== JSON.stringify(data.questions)) renderQuestions();
+      if (previous.completed !== data.completed) renderChallenge();
+      if ($('#demo-modal').open) {
+        if ($('.unlock-explanation') && active()) {
+          const old = previous.connections.find(c => c.id === ui.activeId);
+          if (!old || old.myConsent !== active().myConsent || old.peerConsent !== active().peerConsent || old.identity !== active().identity) refreshModal(showUnlock);
+        }
+        else if ($('[data-form="group"]') && currentGroup) {
+          const group = data.groups.find(g => g.id === currentGroup.id);
+          if (!group) { closeModal(); notify('This group is no longer open.'); }
+          else if (JSON.stringify(group) !== JSON.stringify(currentGroup)) refreshModal(() => showGroup(group.id));
+        } else if ($('[data-form="reply"]') && currentQuestion) {
+          const question = data.questions.find(q => q.id === currentQuestion.id);
+          if (question && JSON.stringify(question) !== JSON.stringify(currentQuestion)) refreshModal(() => showQuestion(question.id));
+        }
+        if (!active() && $('.unlock-explanation, [data-action="confirm-phone"], [data-action="confirm-end"], [data-action="confirm-report"]')) closeModal();
+      }
+      if ($('#data-status')) $('#data-status').hidden = true;
+    } catch (error) {
+      if ($('#data-status')) { $('#data-status').hidden = false; $('#data-status-message').textContent = error.userMessage || 'Unable to refresh. Retrying…'; }
+    } finally { refreshing = false; }
+  }
   await loadData();
+  const timer = setInterval(refresh,2000);
+  addEventListener('pagehide',() => clearInterval(timer),{once:true});
 })().catch(() => {
   const status = document.getElementById('data-status');
   if (status) { status.hidden = false; document.getElementById('data-status-message').textContent = 'Unable to load the page. Please refresh and try again.'; }

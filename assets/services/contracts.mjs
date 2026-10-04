@@ -4,17 +4,18 @@
  * records, and reject on failure; the UI never invents a successful backend write.
  * See docs/backend-integration.md for the complete provider interface.
  *
- * @typedef {{id:string, alias:string, name:string}} Profile
+ * @typedef {{id:string, alias:string, name:string, firstName:string, lastName:string, linkedin:string, phone:string, email:string|null, role:'user'|'admin'}} Profile
  * @typedef {{id:string, alias:string, color:string, text:string, interest:string}} DailyResponse
- * @typedef {{id:string, text:string, answer:string, responses:DailyResponse[]}} DailyQuestion
- * @typedef {{id:string, text:string, icon:string, percent:number}} PollChoice
- * @typedef {{id:string, question:string, choices:PollChoice[], vote:string|null, totalVotes:number}} Poll
+ * @typedef {{id:string, text:string, answer:string, status:'draft'|'published'|'closed'|'archived', responses:DailyResponse[]}} DailyQuestion
+ * @typedef {{id:string, text:string, icon:string, percent:number|null}} PollChoice
+ * @typedef {{id:string, question:string, choices:PollChoice[], vote:string|null, totalVotes:number|null, resultsPublic:boolean, status:string}} Poll
  * @typedef {{id:string, from:'me'|'them', text:string, time:string}} Message
- * @typedef {{id:string, alias:string, color:string, source:string, shared:string, interests:string[], preview:string, time:string, messages:Message[], reveal:null|'waiting'|'revealed', identity:string|null}} Connection
+ * @typedef {{firstName:string, lastName:string, linkedin:string}} PeerIdentity
+ * @typedef {{id:string, alias:string, color:string, source:string, shared:string, interests:string[], preview:string, time:string, messages:Message[], reveal:null|'waiting'|'revealed', identity:string|null, identityDetails:PeerIdentity|null, myConsent:boolean, peerConsent:boolean, phone:string|null, phoneShared:boolean, hasOlderMessages:boolean, incremental:boolean}} Connection
  * @typedef {{id:string, alias:string, text:string, isMine:boolean}} Response
  * @typedef {{id:string, category:string, text:string, detail:string, alias:string, time:string, responses:Response[]}} Question
- * @typedef {{id:string, name:string, icon:string, color:string, size:number, description:string, activity:string, question:string, joined:boolean, messages:Array<Message & {alias:string}>}} Group
- * @typedef {{profile:Profile, daily:DailyQuestion, poll:Poll, completed:boolean, connections:Connection[], groups:Group[], questions:Question[], categories:string[]}} AppData
+ * @typedef {{id:string, name:string, icon:string, color:string, size:number, description:string, activity:string, question:string, joined:boolean, approval:'pending'|'approved'|'rejected', status:'open'|'closed'|'archived', decisionReason:string, isMine:boolean, messages:Array<Message & {alias:string}>}} Group
+ * @typedef {{profile:Profile, dailyQuestions:DailyQuestion[], polls:Poll[], completed:boolean, connections:Connection[], groups:Group[], groupProposals:Group[], questions:Question[], categories:string[]}} AppData
  * @typedef {{kind:'daily-answer', questionId:string, responseId:string}|{kind:'similar-answer', questionId:string}|{kind:'poll', pollId:string}|{kind:'question-response', questionId:string, responseId:string}} ConnectionContext
  * @typedef {{connection:Connection, completed:boolean}} ConnectionResult
  * @typedef {Object} DataProvider
@@ -65,10 +66,11 @@ export function assertDaily(value) {
 export function assertPoll(value) {
   assert(strings(value, ['id', 'question']) && id(value.id));
   assert(list(value.choices, choice => {
-    assert(strings(choice, ['id', 'text', 'icon']) && id(choice.id) && Number.isFinite(choice.percent) && choice.percent >= 0 && choice.percent <= 100);
+    assert(strings(choice, ['id', 'text', 'icon']) && id(choice.id) && (choice.percent === null || (Number.isFinite(choice.percent) && choice.percent >= 0 && choice.percent <= 100)));
   }));
   assert(value.vote === null || value.choices.some(choice => choice.id === value.vote));
-  assert(Number.isFinite(value.totalVotes) && value.totalVotes >= 0);
+  assert(value.totalVotes === null || (Number.isFinite(value.totalVotes) && value.totalVotes >= 0));
+  if (value.resultsPublic === false) assert(value.totalVotes === null && value.choices.every(choice => choice.percent === null && choice.count === undefined));
   return value;
 }
 function assertMessage(value) {
@@ -81,6 +83,7 @@ export function assertConnection(value) {
   assert([null, 'waiting', 'revealed'].includes(value.reveal));
   // The frontend must never receive a hidden peer's real identity.
   assert(value.reveal === 'revealed' ? typeof value.identity === 'string' : value.identity === null);
+  if (value.identityDetails !== undefined) assert(value.reveal === 'revealed' ? strings(value.identityDetails, ['firstName', 'lastName', 'linkedin']) : value.identityDetails === null);
   return value;
 }
 export function assertGroup(value) {
@@ -98,10 +101,12 @@ export function assertQuestion(value) {
 }
 export function assertAppData(value) {
   assert(object(value) && strings(value.profile, ['id', 'alias', 'name']) && id(value.profile.id));
-  assertDaily(value.daily);
-  assertPoll(value.poll);
+  // Legacy snapshots are accepted only for the explicitly injected demo provider.
+  assert(list(value.dailyQuestions ?? [value.daily], assertDaily));
+  assert(list(value.polls ?? [value.poll], assertPoll));
   assert(typeof value.completed === 'boolean');
   assert(list(value.connections, assertConnection) && list(value.groups, assertGroup) && list(value.questions, assertQuestion));
+  if (value.groupProposals !== undefined) assert(list(value.groupProposals, assertGroup));
   assert(Array.isArray(value.categories) && value.categories.every(category => typeof category === 'string'));
   return value;
 }
@@ -135,6 +140,9 @@ export function prepareProvider(provider) {
   if (provider.capabilities.simulateIdentityConsent) {
     assert(typeof provider.simulateIdentityConsent === 'function');
     wrapped.simulateIdentityConsent = async input => assertConnection(await provider.simulateIdentityConsent(input));
+  }
+  for (const method of ['saveProfile','proposeGroup','editGroupProposal','sharePhone','loadOlderMessages']) {
+    if (typeof provider[method] === 'function') wrapped[method] = (...args) => provider[method](...args);
   }
   return wrapped;
 }

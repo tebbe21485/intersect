@@ -8,6 +8,7 @@ function select(value) {
   if (['daily', 'poll', 'challenge'].includes(value.activity)) state.activity = value.activity;
   if (typeof value.community === 'string') state.community = value.community;
   if (typeof value.notice === 'string') state.notice = value.notice;
+  for (const key of ['viewerId','dailyId','pollId']) if (typeof value[key] === 'string') state[key] = value[key];
   if (value.dismissed && typeof value.dismissed === 'object') {
     state.dismissed = Object.fromEntries(Object.entries(value.dismissed)
       .filter(([, prompts]) => Array.isArray(prompts))

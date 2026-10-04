@@ -1,7 +1,7 @@
 """JSON view models shared with assets/services/contracts.mjs, not SQL tables.
 
-Keys retain the browser's spelling. These annotations do not validate requests;
-the eventual backend must validate inputs and authorize access before using them.
+Keys retain the browser's spelling. API inputs are validated by validation.py;
+application.py authorizes and returns these viewer-specific projections.
 """
 
 from typing import Literal, TypedDict
@@ -13,6 +13,12 @@ class Profile(TypedDict):
     id: str
     alias: str
     name: str
+    firstName: str
+    lastName: str
+    linkedin: str
+    phone: str
+    email: str | None
+    role: Literal["user", "admin"]
 
 
 class DailyResponse(TypedDict):
@@ -28,13 +34,14 @@ class DailyQuestion(TypedDict):
     text: str
     answer: str
     responses: list[DailyResponse]
+    status: Literal["draft", "published", "closed", "archived"]
 
 
 class PollChoice(TypedDict):
     id: str
     text: str
     icon: str
-    percent: float
+    percent: float | None
 
 
 class Poll(TypedDict):
@@ -42,7 +49,9 @@ class Poll(TypedDict):
     question: str
     choices: list[PollChoice]
     vote: str | None
-    totalVotes: int
+    totalVotes: int | None
+    resultsPublic: bool
+    status: Literal["draft", "published", "closed", "archived"]
 
 
 Message = TypedDict(
@@ -68,6 +77,19 @@ class Connection(TypedDict):
     messages: list[Message]
     reveal: Literal["waiting", "revealed"] | None
     identity: str | None  # Must be None until both people consent.
+    identityDetails: "PeerIdentity | None"
+    myConsent: bool
+    peerConsent: bool
+    phone: str | None  # Only after the owner separately shares with this recipient.
+    phoneShared: bool
+    hasOlderMessages: bool
+    incremental: bool
+
+
+class PeerIdentity(TypedDict):
+    firstName: str
+    lastName: str
+    linkedin: str
 
 
 class Response(TypedDict):
@@ -102,15 +124,20 @@ class Group(TypedDict):
     question: str
     joined: bool
     messages: list[GroupMessage]
+    approval: Literal["pending", "approved", "rejected"]
+    status: Literal["open", "closed", "archived"]
+    decisionReason: str
+    isMine: bool
 
 
 class AppData(TypedDict):
     profile: Profile
-    daily: DailyQuestion
-    poll: Poll
+    dailyQuestions: list[DailyQuestion]
+    polls: list[Poll]
     completed: bool
     connections: list[Connection]
     groups: list[Group]
+    groupProposals: list[Group]
     questions: list[Question]
     categories: list[str]
 

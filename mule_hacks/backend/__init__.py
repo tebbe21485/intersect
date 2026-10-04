@@ -1,1 +1,1 @@
-"""Archived backend prototype. Not imported by the frontend application."""
+"""SQLite-backed application services and Reflex-hosted routes."""
