@@ -124,6 +124,36 @@ def poll(c, uid, pid, admin=False):
     }
 
 
+def floor_progress(c, tid, participants):
+    row = c.execute("SELECT current_floor FROM connectionfloorbase WHERE thread_id=?", (tid,)).fetchone()
+    floor = row[0] if row else 1
+    preferences = {row["user_id"]: row for row in c.execute("SELECT * FROM floorparticipantbase WHERE thread_id=?", (tid,))}
+    counts = {str(owner): min(2, c.execute("SELECT COUNT(*) FROM directmessagebase WHERE thread_id=? AND sender_id=? AND floor=? AND kind='message'", (tid, owner, floor)).fetchone()[0]) for owner in participants}
+    minimum = all(count >= 2 for count in counts.values())
+    return {"participantIds": [str(owner) for owner in participants], "currentFloor": floor,
+        "counts": counts, "ready": {str(owner): bool(preferences.get(owner) and preferences[owner]["ready"]) for owner in participants},
+        "sensitive": {str(owner): bool(preferences.get(owner) and preferences[owner]["sensitive"]) for owner in participants},
+        "canAdvance": floor < 4 and minimum, "identityAvailable": floor > 2 or (floor == 2 and minimum),
+        "allowSensitivePrompts": all(preferences.get(owner) and preferences[owner]["sensitive"] for owner in participants)}
+
+
+def puzzle_owners(c, tid, uid, participants):
+    owners = []
+    shared = {row["piece_id"]: row for row in c.execute("SELECT * FROM sharedpuzzlepiecebase WHERE thread_id=?", (tid,))}
+    for owner in sorted(participants):
+        alias = one(c, "SELECT alias FROM userbase WHERE user_id=?", (owner,))[0]
+        pieces = []
+        for piece in c.execute("SELECT * FROM puzzlepiecebase WHERE user_id=? ORDER BY piece_id", (owner,)):
+            reveal = shared.get(piece["piece_id"])
+            title = reveal["title"] if reveal else piece["title"] or piece["category"].replace("_", " ").title()[:20]
+            description = reveal["description"] if reveal else piece["content"]
+            pieces.append({"id": str(piece["piece_id"]), "ownerId": str(owner),
+                "shortLabel": title if owner == uid or reveal else "", "description": description if owner == uid or reveal else "",
+                "isShared": bool(reveal)})
+        owners.append({"id": str(owner), "alias": alias, "color": f"hsl({owner * 137 % 360} 50% 35%)", "pieces": pieces})
+    return owners
+
+
 def connection(c, uid, tid, after=None):
     row, peer_id = conversation(c, uid, tid)
     peer = one(c, "SELECT * FROM userbase WHERE user_id=?", (peer_id,))
@@ -162,11 +192,17 @@ def connection(c, uid, tid, after=None):
             "from": "me" if m["sender_id"] == uid else "them",
             "text": m["content"],
             "time": m["created_at"],
+            "kind": m["kind"],
+            "floor": m["floor"],
         }
         for m in records
     ]
     return {
         "id": str(tid),
+        "peerId": str(peer_id),
+        "puzzleKey": f"connection:{tid}",
+        "puzzleOwners": puzzle_owners(c, tid, uid, [uid, peer_id]),
+        "floorProgress": {**floor_progress(c, tid, [uid, peer_id]), "messages": [{"text": m["content"]} for m in records if m["kind"] == "message"]},
         "alias": peer["alias"],
         "color": "blue",
         "source": row["source"],

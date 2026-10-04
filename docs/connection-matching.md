@@ -17,8 +17,8 @@ uv sync --cache-dir .cache/uv
 .venv/Scripts/reflex.exe run --env prod --single-port --backend-port 3001
 ```
 
-Schema version 3 adds a separate puzzle title to the matching tables introduced
-in version 2. Upgrading versions 1 or 2 backs up SQLite and preserves existing
+Schema version 4 adds shared-puzzle and floor state to the title and matching
+tables introduced in versions 2 and 3. Upgrading versions 1, 2 or 3 backs up SQLite and preserves existing
 accounts, IDs, password hashes, sessions, messages, questions, votes and groups.
 Initialization never invokes the model or invents answers from legacy fields.
 Backfill explicitly embeds old responses once and is resumable.

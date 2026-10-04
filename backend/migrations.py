@@ -9,7 +9,29 @@ from argon2 import PasswordHasher
 
 from .sqlite import SQLiteSettings, sqlite_connection
 
-VERSION = 3
+VERSION = 4
+CONNECTION_SCHEMA = """
+CREATE TABLE connectionfloorbase (
+ thread_id INTEGER PRIMARY KEY REFERENCES directthreadbase ON DELETE CASCADE,
+ current_floor INTEGER NOT NULL DEFAULT 1 CHECK(current_floor BETWEEN 1 AND 4)
+);
+CREATE TABLE floorparticipantbase (
+ thread_id INTEGER NOT NULL REFERENCES directthreadbase ON DELETE CASCADE,
+ user_id INTEGER NOT NULL REFERENCES userbase,
+ ready INTEGER NOT NULL DEFAULT 0 CHECK(ready IN (0,1)),
+ sensitive INTEGER NOT NULL DEFAULT 0 CHECK(sensitive IN (0,1)),
+ PRIMARY KEY(thread_id,user_id)
+);
+CREATE TABLE sharedpuzzlepiecebase (
+ thread_id INTEGER NOT NULL REFERENCES directthreadbase ON DELETE CASCADE,
+ piece_id INTEGER NOT NULL REFERENCES puzzlepiecebase ON DELETE CASCADE,
+ owner_id INTEGER NOT NULL REFERENCES userbase,
+ title TEXT NOT NULL, description TEXT NOT NULL,
+ PRIMARY KEY(thread_id,piece_id)
+);
+ALTER TABLE directmessagebase ADD COLUMN floor INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE directmessagebase ADD COLUMN kind TEXT NOT NULL DEFAULT 'message';
+"""
 PUZZLE_TITLE_SCHEMA = "ALTER TABLE puzzlepiecebase ADD COLUMN title TEXT NOT NULL DEFAULT '';"
 MATCHING_SCHEMA = """
 CREATE TABLE puzzlepiecebase (
@@ -298,7 +320,7 @@ def migrate(settings: SQLiteSettings | None = None):
             version = c.execute(
                 "SELECT MAX(version) FROM schema_migrations"
             ).fetchone()[0]
-            if version not in (1, 2, VERSION):
+            if version not in (1, 2, 3, VERSION):
                 raise RuntimeError(
                     f"Unsupported database version {version}; expected {VERSION}."
                 )
@@ -315,6 +337,9 @@ def migrate(settings: SQLiteSettings | None = None):
                     c.execute(statement)
             if current in (1, 2):
                 c.execute(PUZZLE_TITLE_SCHEMA)
+            if current in (1, 2, 3):
+                for statement in statements(CONNECTION_SCHEMA):
+                    c.execute(statement)
                 c.execute(
                     "INSERT INTO schema_migrations(version) VALUES(?)", (VERSION,)
                 )
@@ -353,6 +378,8 @@ def migrate(settings: SQLiteSettings | None = None):
         for statement in statements(MATCHING_SCHEMA):
             c.execute(statement)
         c.execute(PUZZLE_TITLE_SCHEMA)
+        for statement in statements(CONNECTION_SCHEMA):
+            c.execute(statement)
         c.execute("INSERT INTO schema_migrations(version) VALUES(?)", (VERSION,))
         return {
             "version": VERSION,

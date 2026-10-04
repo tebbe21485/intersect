@@ -61,12 +61,18 @@ Message = TypedDict(
         "from": Literal["me", "them"],
         "text": str,
         "time": str,
+        "kind": NotRequired[Literal["message", "notice"]],
+        "floor": NotRequired[int],
     },
 )
 
 
 class Connection(TypedDict):
     id: str
+    peerId: NotRequired[str]
+    puzzleKey: NotRequired[str]
+    puzzleOwners: NotRequired[list[dict]]
+    floorProgress: NotRequired[dict]
     alias: str
     color: Color
     source: str

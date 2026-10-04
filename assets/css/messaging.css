@@ -1,3 +1,69 @@
+/* Group threads use the main workspace without changing app navigation. */
+.group-thread-open .main-content {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+.group-chat-content:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 64px);
+  min-height: 0;
+  background: var(--color-surface);
+}
+.group-chat-content .chat-header,
+.group-chat-content .chat-context,
+.group-chat-content .chat-bottom {
+  flex-shrink: 0;
+  padding: 20px 32px;
+}
+.group-chat-content .chat-header {
+  flex-wrap: wrap;
+}
+.group-chat-heading {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.group-chat-heading h2 {
+  font-size: 24px;
+}
+.group-chat-content .chat-context {
+  overflow-wrap: anywhere;
+}
+.group-chat-content .chat-context svg {
+  flex-shrink: 0;
+}
+.group-chat-content .chat-messages {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  padding: 24px 32px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.group-chat-content .message {
+  max-width: min(85%, 700px);
+  overflow-wrap: anywhere;
+}
+.group-chat-content .chat-bottom {
+  border-top: 1px solid var(--color-border);
+}
+@media (max-width: 640px) {
+  .group-chat-content:not([hidden]) {
+    height: calc(100dvh - 78px - 80px - env(safe-area-inset-bottom));
+  }
+  .group-chat-content .chat-header,
+  .group-chat-content .chat-context,
+  .group-chat-content .chat-messages,
+  .group-chat-content .chat-bottom {
+    padding: 12px 16px;
+  }
+  .group-chat-content .message {
+    max-width: 95%;
+  }
+}
+
 /* Messages replaces the app navigation with a conversation sidebar. */
 .messaging-mode .conversations-sidebar {
   width: 300px;

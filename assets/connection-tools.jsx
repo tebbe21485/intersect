@@ -18,7 +18,7 @@ function FloorProgress({progress, userId, peer}) {
   </div>;
 }
 
-function AdvanceFloor({progress, connectionId, userId}) {
+function AdvanceFloor({progress, connectionId, userId, onReady}) {
   if (!progress.canAdvance) return progress.currentFloor === 4
     ? <p className="puzzle-note text-sm">You can keep talking and sharing on Trust for as long as you like.</p> : null;
   const ready = Boolean(progress.ready[userId]);
@@ -26,17 +26,17 @@ function AdvanceFloor({progress, connectionId, userId}) {
     <h3>Ready for the Next Floor?</h3>
     <p className="puzzle-note text-sm">{ready ? 'Waiting for your connection to agree. You can stay here.' : 'Advance only when you both feel ready.'}</p>
     <button type="button" className="btn primary w-full"
-      onClick={() => puzzleModules.setFloorReady(connectionId, userId, !ready)}>
+      onClick={() => onReady(!ready)}>
       {ready ? 'Cancel readiness' : 'I’m ready for the next floor'}
     </button>
   </section>;
 }
 
-function SensitivePromptOptIn({progress, connectionId, userId}) {
+function SensitivePromptOptIn({progress, connectionId, userId, onChange}) {
   return <section className="sensitive-opt-in">
     <label className="flex items-center gap-2 text-sm">
       <input type="checkbox" checked={Boolean(progress.sensitive[userId])}
-        onChange={event => puzzleModules.setSensitiveOptIn(connectionId, userId, event.target.checked)} />
+        onChange={event => onChange(event.target.checked)} />
       Allow sensitive prompts
     </label>
     <p className="puzzle-note text-xs">{progress.allowSensitivePrompts
@@ -89,7 +89,17 @@ function IdentityRevealControl({progress, connection}) {
 function ConnectionTools({connectionId, profile, connection, owners, onShare}) {
   const [tab, setTab] = PuzzleReact.useState('conversation');
   const baseId = PuzzleReact.useId();
-  const progress = puzzleModules.getConnectionState(connectionId, owners.map(owner => owner.id));
+  const progress = connection.floorProgress
+    ? {...connection.floorProgress, messages: connection.messages.filter(message => message.kind !== 'notice')}
+    : puzzleModules.getConnectionState(connectionId, owners.map(owner => owner.id));
+  const [error, setError] = PuzzleReact.useState('');
+  async function update(method, input, local) {
+    setError('');
+    try {
+      if (connection.floorProgress) await window.intersectConnectionAction(method, {connectionId: connection.id, ...input});
+      else { local(); await window.intersectRefreshLocalConnection?.(); }
+    } catch (error) { setError(error.message); }
+  }
   const tabs = [['conversation', 'Conversation'], ['puzzle', 'Puzzle'], ['identity', 'Identity']];
   function choose(index, focus = false) {
     setTab(tabs[index][0]);
@@ -101,6 +111,7 @@ function ConnectionTools({connectionId, profile, connection, owners, onShare}) {
     if (input) { input.value = activity.prompt; input.dispatchEvent(new Event('input', {bubbles: true})); input.focus(); }
   }
   return <div className="connection-tools">
+    {error ? <p role="alert" className="puzzle-panel">{error}</p> : null}
     <div className="module-tabs" role="tablist" aria-label="Connection tools">
       {tabs.map(([id, label], index) => <button key={id} type="button" role="tab" id={`${baseId}-tab-${id}`}
         aria-selected={tab === id} aria-controls={`${baseId}-panel-${id}`} tabIndex={tab === id ? 0 : -1}
@@ -112,12 +123,14 @@ function ConnectionTools({connectionId, profile, connection, owners, onShare}) {
     <section role="tabpanel" id={`${baseId}-panel-conversation`} aria-labelledby={`${baseId}-tab-conversation`} hidden={tab !== 'conversation'} className="puzzle-panel">
       <ConnectionFloor progress={progress} />
       <FloorProgress progress={progress} userId={profile.id} peer={connection.alias} />
-      <AdvanceFloor progress={progress} connectionId={connectionId} userId={profile.id} />
+      <AdvanceFloor progress={progress} connectionId={connectionId} userId={profile.id}
+        onReady={ready => update('setConnectionFloorReady', {ready, floor: progress.currentFloor}, () => puzzleModules.setFloorReady(connectionId, profile.id, ready))} />
       <InteractionSuggestions progress={progress} context={connection.shared} onUse={use} />
-      <SensitivePromptOptIn progress={progress} connectionId={connectionId} userId={profile.id} />
+      <SensitivePromptOptIn progress={progress} connectionId={connectionId} userId={profile.id}
+        onChange={enabled => update('setConnectionSensitiveOptIn', {enabled}, () => puzzleModules.setSensitiveOptIn(connectionId, profile.id, enabled))} />
     </section>
     <section role="tabpanel" id={`${baseId}-panel-puzzle`} aria-labelledby={`${baseId}-tab-puzzle`} hidden={tab !== 'puzzle'}>
-      {owners.every(owner => owner.pieces.length >= 4) ? <SharedPuzzle owners={owners} connectionId={connectionId} currentUserId={profile.id} onShare={onShare} />
+      {owners.every(owner => owner.pieces.length >= 4 && owner.pieces.length <= 8) ? <SharedPuzzle owners={owners} connectionId={connectionId} currentUserId={profile.id} onShare={onShare} />
         : <div className="puzzle-panel"><h2 className="puzzle-title">Your shared puzzle</h2>
           <p className="puzzle-note text-sm">Create your pieces at signup, or try a sample account to build a shared puzzle.</p>
           <a href="/login?demo=1" className="text-link">Try a sample account</a></div>}

@@ -31,11 +31,13 @@ The **Build your puzzle** entry on Connections opens the existing matching edito
 
 Hidden pieces render no label, description or private text in their SVG accessibility attributes. Revealed pieces support clicks, Enter and Space, and show a detail card. Only the current person's unshared pieces appear in the sharing selector. Sharing in one connection does not reveal that piece in another.
 
-## Local-state limits
+## Authenticated connections and local samples
 
-Puzzle definitions, the selected sample account, reveal IDs, floor progress and consent choices use browser `sessionStorage` so ordinary document navigation and sample-account switching preserve the demo. State also works in memory when storage is unavailable. Sample sign-in requires browser storage. The data is demo state, not a production privacy boundary: it is not transmitted to a puzzle or floors API or synchronized between separate tabs, browsers or devices. Existing authenticated identity and phone APIs retain their backend consent rules; floor gating is currently a local UI/demo rule.
+Normal account sign-in uses database-backed shared pieces, floor readiness and sensitive opt-ins. Sharing commits a connection-specific snapshot of the title and description together with a chat notice. Unshared peer pieces return blank titles and descriptions; ownership, conversation access and blocking are checked on every write. Editing your private puzzle afterward does not silently change the snapshot you already shared. Readiness notices are also saved atomically, and neither type of notice counts toward floor message requirements. Both users see changes through the existing two-second refresh.
 
-Signup uses the existing account API and opens `/matching`. The builder saves titles and descriptions through the existing matching service, then mirrors its saved pieces into local puzzle state. Earlier locally created signup pieces are retained by importing them when the builder is opened. Authenticated peers without an available local puzzle have four neutral placeholder slots. The full two-person sharing workflow is demonstrated through the sample accounts; peer puzzle sharing still has no synchronization API.
+Signup opens `/matching`. The builder saves pieces through the matching service and mirrors them into local preview state. Labels automatically wrap and resize within fixed SVG centers. Earlier local signup pieces are imported when the builder is opened.
+
+The explicitly selected password-free sample accounts still use browser `sessionStorage`; they support switching sides within one tab, but do not synchronize between browsers. Their private and group messages use the same backend word filter before entering local state. A blocked message identifies the flagged words, preserves the draft, and adds no floor progress. Sample message sending requires the server; a failed moderation request never publishes the message. The moderation endpoint does not store the submitted content. Authenticated accounts use the server for synchronization and validate messages again during the write.
 
 ## Verification
 
@@ -44,4 +46,4 @@ node --test tests/frontend/connection-floors.test.mjs tests/frontend/puzzle.test
 .venv/Scripts/reflex.exe compile --dry
 ```
 
-Browser checks cover sample sign-ins, sharing/details, hidden text, keyboard access, connection isolation, account switching, message sending, signup-to-builder routing, title/description fields, 4–8 limits, reloads, edits at the maximum, the 16-slot layout, mobile overflow, all four floors, mutual readiness/identity, sensitive opt-in and builder tabs. Checks run against an isolated QA database and production build. Run the existing `init` command before restarting an older database to apply schema version 3's title column; it creates a backup and retains existing descriptions. No floors migration is needed.
+Browser checks cover sample sign-ins, sharing/details, hidden text, keyboard access, connection isolation, account switching, message sending, signup-to-builder routing, title/description fields, 4–8 limits, reloads, edits at the maximum, the 16-slot layout, mobile overflow, all four floors, mutual readiness/identity, sensitive opt-in and builder tabs. Checks run against an isolated QA database and production build. Run the existing `init` command before restarting an older database to apply schema version 4's sharing and floor tables; it creates a backup and retains existing descriptions and messages.

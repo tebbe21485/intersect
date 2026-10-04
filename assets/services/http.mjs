@@ -30,5 +30,9 @@ export async function request(path, input, {redirect = true, timeoutMs = 15000} 
 }
 
 export const session = () => request('session', undefined, {redirect: false});
+export async function moderateMessage(text) {
+  if (!csrfToken) await session();
+  await request('moderate-message', {text}, {redirect: false});
+}
 // The first saved piece can include loading the existing local matching model.
 export const action = (method, input) => request('action', {method, input}, {timeoutMs: method === 'savePuzzlePiece' ? 60000 : 15000});

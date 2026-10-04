@@ -17,7 +17,19 @@ def text(value, label="Text", maximum=1000, required=True, filtered=True):
             f"{label} must contain {'1' if required else '0'}–{maximum} characters."
         )
     if filtered and profanity.contains_profanity(value):
-        raise AppError(f"Please edit {label.lower()} to remove inappropriate language.")
+        # Diff the moderator's own replacement so obfuscated and multiword
+        # matches are reported consistently with the rule that rejected them.
+        from difflib import SequenceMatcher
+
+        censored = profanity.censor(value, censor_char="\ufffd")
+        flagged = []
+        for kind, start, end, other_start, other_end in SequenceMatcher(None, value, censored, autojunk=False).get_opcodes():
+            if kind != "equal" and "\ufffd" in censored[other_start:other_end]:
+                fragment = value[start:end].strip()
+                if fragment and fragment not in flagged:
+                    flagged.append(fragment)
+        words = ", ".join(f'“{word}”' for word in flagged) or "inappropriate language"
+        raise AppError(f"{label} was flagged for {words}. Please edit it and try again.")
     return value
 
 

@@ -66,6 +66,75 @@ class ApplicationTests(unittest.TestCase):
             self.admin, "saveQuestion", {"text": text, "status": "published"}
         )["dailyQuestions"][0]
 
+    def test_shared_pieces_sync_privately_and_notice_is_atomic_and_idempotent(self):
+        tid = self.conversation()["id"]
+        own = self.service.action(self.a, "savePuzzlePiece", {"category": "interests", "title": "My robot projects", "description": "A private story about small robots"})
+        peer = self.service.action(self.b, "savePuzzlePiece", {"category": "interests", "title": "Private peer title", "description": "Private peer description"})
+        before = self.service.load(self.a)["connections"][0]
+        self.assertNotIn(peer["description"], json.dumps(before))
+        self.assertNotIn(peer["title"], json.dumps(before))
+        self.assertEqual(before["floorProgress"]["counts"], {str(self.a): 0, str(self.b): 0})
+        with self.assertRaises(AppError):
+            self.service.action(self.b, "shareConnectionPiece", {"connectionId": tid, "pieceId": own["id"]})
+        payload = {"connectionId": tid, "pieceId": own["id"]}
+        self.service.action(self.a, "shareConnectionPiece", payload)
+        self.service.action(self.a, "shareConnectionPiece", payload)
+        other = ApplicationService(self.db).load(self.b)["connections"][0]
+        revealed = next(owner for owner in other["puzzleOwners"] if owner["id"] == str(self.a))["pieces"][0]
+        self.assertEqual(revealed["description"], own["description"])
+        self.assertTrue(revealed["isShared"])
+        self.assertEqual(len(other["messages"]), 1)
+        self.assertEqual(other["messages"][0]["kind"], "notice")
+        self.assertIn(own["title"], other["messages"][0]["text"])
+        self.assertEqual(other["floorProgress"]["counts"], {str(self.b): 0, str(self.a): 0})
+        with self.assertRaises(AppError):
+            self.service.action(self.admin, "shareConnectionPiece", payload)
+        with self.db.transaction(write=True) as c:
+            x, y = sorted((self.a, self.admin))
+            another = c.execute("INSERT INTO directthreadbase(sender_id,receiver_id,source,shared) VALUES(?,?,?,?)", (x, y, "Test", "Test")).lastrowid
+            from mule_hacks.backend.repository import connection
+            hidden = connection(c, self.admin, another)["puzzleOwners"]
+            self.assertFalse(next(owner for owner in hidden if owner["id"] == str(self.a))["pieces"][0]["isShared"])
+
+    def test_mutual_readiness_syncs_and_notices_do_not_count_as_messages(self):
+        tid = self.conversation()["id"]
+        with self.assertRaises(AppError):
+            self.service.action(self.a, "setConnectionFloorReady", {"connectionId": tid, "floor": 1, "ready": True})
+        for uid in (self.a, self.b):
+            for index in range(2):
+                self.service.action(uid, "sendMessage", {"connectionId": tid, "text": "A thoughtful hello", "requestId": f"talk-{uid}-{index}"})
+        request = {"connectionId": tid, "floor": 1, "ready": True}
+        self.service.action(self.a, "setConnectionFloorReady", request)
+        self.service.action(self.a, "setConnectionFloorReady", request)
+        waiting = self.service.load(self.b)["connections"][0]
+        self.assertEqual(waiting["floorProgress"]["currentFloor"], 1)
+        self.assertTrue(waiting["floorProgress"]["ready"][str(self.a)])
+        self.assertEqual(sum(m["kind"] == "notice" for m in waiting["messages"]), 1)
+        advanced = self.service.action(self.b, "setConnectionFloorReady", request)
+        self.assertEqual(advanced["floorProgress"]["currentFloor"], 2)
+        self.assertTrue(all(count == 0 for count in advanced["floorProgress"]["counts"].values()))
+        self.assertEqual(sum(m["kind"] == "notice" for m in advanced["messages"]), 2)
+        with self.assertRaises(AppError):
+            self.service.action(self.a, "setConnectionFloorReady", request)
+        for uid in (self.a, self.b):
+            result = self.service.action(uid, "setConnectionSensitiveOptIn", {"connectionId": tid, "enabled": True})
+        self.assertTrue(result["floorProgress"]["allowSensitivePrompts"])
+
+    def test_moderation_identifies_flagged_words_without_saving_the_message(self):
+        tid = self.conversation()["id"]
+        with self.assertRaises(AppError) as error:
+            self.service.action(self.a, "sendMessage", {"connectionId": tid, "text": "This is shit and fuck", "requestId": "blocked"})
+        self.assertIn("shit", str(error.exception))
+        self.assertIn("fuck", str(error.exception))
+        for word in ("fuck", "shit", "fucking", "bitch", "bullshit", "damn", "asshole", "sh1t", "f*ck"):
+            with self.subTest(word=word):
+                with self.assertRaises(AppError) as error:
+                    # Even a crafted client request cannot skip moderation.
+                    self.service.action(self.a, "sendMessage", {"connectionId": tid, "text": f"This is {word}.", "requestId": "blocked", "kind": "notice"})
+                self.assertIn(word, str(error.exception))
+        self.assertEqual(self.service.load(self.a)["connections"][0]["messages"], [])
+        self.assertTrue(all(count == 0 for count in self.service.load(self.a)["connections"][0]["floorProgress"]["counts"].values()))
+
     def poll(self, public=True):
         return self.service.admin_action(
             self.admin,

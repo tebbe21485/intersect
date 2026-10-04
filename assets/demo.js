@@ -211,12 +211,28 @@
     ids: [data.profile.id, c.peerId || `peer:${c.id}`],
   });
   const identityAvailable = c => {
+    if (c.floorProgress) return c.floorProgress.identityAvailable;
     const context = floorContext(c);
     return getConnectionState(context.key, context.ids).identityAvailable;
   };
   window.addEventListener('intersect:connection-change', () => {
     if (data && !pending && active()) renderChat(true);
   });
+  window.intersectConnectionAction = async (method, input) => {
+    if (pending || !provider?.[method]) throw new Error('Please wait and try again.');
+    let result;
+    await runOperation(async () => {
+      result = await provider[method](input);
+      data.connections = replaceRecord(data.connections, result);
+      renderChat(true);
+    });
+    if (!result) throw new Error('The change was not saved. Please try again.');
+    return result;
+  };
+  window.intersectRefreshLocalConnection = async () => {
+    if (!provider || provider.capabilities.backend) return;
+    data = await provider.load(); selectActivities(); renderChat(true);
+  };
   function renderChat(preserveDraft = false) {
     if (!$('#chat-content')) return;
     const draft = preserveDraft ? ($('[data-form="message"] input')?.value || '') : '';
@@ -228,7 +244,7 @@
     const scrollTop = oldMessages?.scrollTop || 0;
     const atBottom = !oldMessages || oldMessages.scrollHeight - oldMessages.scrollTop - oldMessages.clientHeight < 60;
     const c = active();
-    if (c) {
+    if (c && !c.floorProgress) {
       const context = floorContext(c);
       observeMessages(context.key, context.ids, c.messages.map(message => ({...message, ownerId: message.from === 'me' ? data.profile.id : context.ids[1]})));
     }
@@ -264,12 +280,50 @@
     if (!$('#groups-grid')) return;
     $('#groups-grid').innerHTML = data.groups.map(group => `<button type="button" class="group-tile ${escape(group.color)} detailed" data-action="group" data-id="${escape(group.id)}"><span class="group-icon ${escape(group.color)}">${icon(group.icon, 25)}</span><span class="min-w-0 text-left"><strong>${escape(group.name)}</strong><span class="group-description">${escape(group.description)}</span><span class="group-size">${icon('users', 12)}${group.size} members · ${escape(group.activity)}</span></span><span class="group-arrow">${icon('chevron-right')}</span></button>`).join('') || '<p class="muted">There are no groups to join yet.</p>';
   }
-  function showGroup(id) {
+  let groupsScrollTop = 0;
+  function backToGroups() {
+    const id = currentGroup?.id;
+    currentGroup = null;
+    $('#group-chat-content').hidden = true;
+    $('#group-chat-content').innerHTML = '';
+    $('#groups-browse').hidden = false;
+    $('.app-shell').classList.remove('group-thread-open');
+    window.scrollTo(0, groupsScrollTop);
+    $$('[data-action="group"]').find(tile => tile.dataset.id === id)?.focus({preventScroll:true});
+  }
+  function showGroup(id, preserveDraft = false) {
+    const host = $('#group-chat-content');
+    if (!host) return;
+    const oldInput = host.querySelector('input');
+    const draft = preserveDraft ? oldInput?.value || '' : '';
+    const focused = preserveDraft && document.activeElement === oldInput;
+    const selection = focused ? [oldInput.selectionStart, oldInput.selectionEnd] : null;
+    const requestId = preserveDraft ? host.querySelector('form')?.dataset.requestId : null;
+    const oldMessages = host.querySelector('.chat-messages');
+    const scrollTop = oldMessages?.scrollTop || 0;
+    const atBottom = !oldMessages || oldMessages.scrollHeight - scrollTop - oldMessages.clientHeight < 60;
+    const opening = host.hidden;
     currentGroup = data.groups.find(g => g.id === id);
     const g = currentGroup;
-    showModal(g.name, `<p class="muted">${g.size} people · A small space for shared interests</p><div class="group-prompt">${escape(g.question)}</div><div class="group-thread">${g.messages.map(m => `<div class="flex gap-3 my-4">${avatar(m.alias, 'blue', true)}<div><strong class="text-sm">${escape(m.alias)}</strong><p class="text-sm mt-1">${escape(m.text)}</p></div></div>`).join('')}</div>
-      ${g.joined ? '<form class="message-form" data-form="group"><input name="message" aria-label="Message to group" placeholder="Add to the conversation…" maxlength="1000" required/><button class="btn primary" type="submit" aria-label="Send group message">' + icon('send', 18) + '</button></form>' : button(`Join the discussion ${icon('arrow-right')}`, 'join-group')}
-      <p class="text-xs muted mt-4">Your alias is ${escape(data.profile.alias)}. Keep it kind, curious, and anonymous.</p>`);
+    if (!g) { backToGroups(); return; }
+    if (opening) groupsScrollTop = window.scrollY;
+    $('#groups-browse').hidden = true;
+    host.hidden = false;
+    $('.app-shell').classList.add('group-thread-open');
+    host.innerHTML = `<header class="chat-header">
+      ${button(`${icon('arrow-left', 18)}Back to groups`, 'back-groups', '', 'secondary')}
+      <div class="group-chat-heading"><h2>${escape(g.name)}</h2><p class="muted text-xs">${g.size} members</p></div>
+      </header><div class="chat-context">${icon('users', 16)}${escape(g.question)}</div>
+      <div class="chat-messages" role="log" aria-label="Group messages" aria-live="polite">${g.messages.map(m => `<div class="message ${m.from === 'me' ? 'me' : 'them'}"><p>${escape(m.text)}</p><span>${escape(m.alias)} · ${escape(displayTime(m.time))}</span></div>`).join('') || `<p class="muted">${g.joined ? 'Start the conversation by sharing a thoughtful hello.' : 'Accept this group to join the discussion.'}</p>`}</div>
+      <div class="chat-bottom">${g.joined ? '<form class="message-form" data-form="group"><input name="message" aria-label="Message to group" placeholder="Add to the conversation…" maxlength="1000" autocomplete="off" required/><button class="btn primary" type="submit" aria-label="Send group message">' + icon('send', 18) + '</button></form>' : button('Accept group', 'join-group')}
+      <p class="text-xs muted mt-4">Your alias is ${escape(data.profile.alias)}. Keep it kind, curious, and anonymous.</p></div>`;
+    const input = host.querySelector('input');
+    if (input) input.value = draft;
+    if (requestId && host.querySelector('form')) host.querySelector('form').dataset.requestId = requestId;
+    const messages = host.querySelector('.chat-messages');
+    messages.scrollTop = !preserveDraft || atBottom ? messages.scrollHeight : scrollTop;
+    if (opening) { window.scrollTo(0, 0); host.querySelector('[data-action="back-groups"]').focus({preventScroll:true}); }
+    if (focused && input) { input.focus({preventScroll:true}); input.setSelectionRange(...selection); }
   }
   function renderQuestions() {
     if (!$('#question-list')) return;
@@ -321,6 +375,7 @@
       case 'propose-group': groupForm(); break;
       case 'edit-group': groupForm(data.groupProposals.find(g => g.id === d.id)); break;
       case 'group': showGroup(d.id); break;
+      case 'back-groups': backToGroups(); break;
       case 'join-group': runOperation(async () => { const group = await provider.joinGroup({groupId: currentGroup.id}); data.groups = replaceRecord(data.groups, group); renderGroups(); showGroup(group.id); }); break;
       case 'filter': filter = d.category; renderQuestions(); break;
       case 'question': showQuestion(d.id); break;
@@ -482,17 +537,18 @@
       if (JSON.stringify(previous.polls) !== JSON.stringify(data.polls)) renderPoll();
       if (JSON.stringify(previous.connections) !== JSON.stringify(data.connections)) { renderConnections(); renderChat(true); updateCounts(); }
       if (JSON.stringify(previous.groups) !== JSON.stringify(data.groups) || JSON.stringify(previous.groupProposals) !== JSON.stringify(data.groupProposals)) renderGroups();
+      if (currentGroup && $('#group-chat-content') && !$('#group-chat-content').hidden) {
+        const group = data.groups.find(g => g.id === currentGroup.id);
+        if (!group) { backToGroups(); notify('This group is no longer open.'); }
+        else if (JSON.stringify(group) !== JSON.stringify(currentGroup)) showGroup(group.id, true);
+      }
       if (JSON.stringify(previous.questions) !== JSON.stringify(data.questions)) renderQuestions();
       if ($('#demo-modal').open) {
         if ($('.unlock-explanation') && active()) {
           const old = previous.connections.find(c => c.id === ui.activeId);
           if (!old || old.myConsent !== active().myConsent || old.peerConsent !== active().peerConsent || old.identity !== active().identity) refreshModal(showUnlock);
         }
-        else if ($('[data-form="group"]') && currentGroup) {
-          const group = data.groups.find(g => g.id === currentGroup.id);
-          if (!group) { closeModal(); notify('This group is no longer open.'); }
-          else if (JSON.stringify(group) !== JSON.stringify(currentGroup)) refreshModal(() => showGroup(group.id));
-        } else if ($('[data-form="reply"]') && currentQuestion) {
+        else if ($('[data-form="reply"]') && currentQuestion) {
           const question = data.questions.find(q => q.id === currentQuestion.id);
           if (question && JSON.stringify(question) !== JSON.stringify(currentQuestion)) refreshModal(() => showQuestion(question.id));
         }

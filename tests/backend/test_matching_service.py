@@ -14,7 +14,7 @@ from mule_hacks.backend.application import ApplicationService
 from mule_hacks.backend.auth import PasswordAuth
 from mule_hacks.backend.errors import AppError
 from mule_hacks.backend.matching.service import MatchingService
-from mule_hacks.backend.migrations import MATCHING_SCHEMA, SCHEMA, VERSION, statements
+from mule_hacks.backend.migrations import MATCHING_SCHEMA, PUZZLE_TITLE_SCHEMA, SCHEMA, VERSION, statements
 from mule_hacks.backend.sqlite import SQLiteSettings
 from mule_hacks.db_handler import Database, init_db
 
@@ -102,6 +102,28 @@ class MatchingServiceTests(unittest.TestCase):
         self.assertEqual(piece["title"], "Interests")
         self.assertIsNone(init_db(settings)["backup"])
 
+    def test_version_three_upgrade_preserves_messages_and_titles(self):
+        path = Path(self.temp.name) / "version-three.sqlite3"
+        with closing(sqlite3.connect(path)) as c, c:
+            for sql in statements(SCHEMA + MATCHING_SCHEMA):
+                c.execute(sql)
+            c.execute(PUZZLE_TITLE_SCHEMA)
+            c.execute("INSERT INTO schema_migrations(version) VALUES(3)")
+            for index in (1, 2):
+                c.execute("INSERT INTO userbase(email,password_hash,first_name,last_name,alias) VALUES(?,?,?,?,?)", (f"old{index}@example.test", "hash", "Old", "User", f"Old{index}"))
+            c.execute("INSERT INTO puzzlepiecebase(user_id,category,content,title) VALUES(1,'interests','Existing description','Existing title')")
+            c.execute("INSERT INTO directthreadbase(sender_id,receiver_id,source,shared) VALUES(1,2,'Test','Shared hobby')")
+            c.execute("INSERT INTO directmessagebase(thread_id,sender_id,content,request_id) VALUES(1,1,'Existing message','old-message')")
+        settings = SQLiteSettings(path)
+        migrated = init_db(settings)
+        self.assertTrue(Path(migrated["backup"]).is_file())
+        data = ApplicationService(Database(settings)).load(1)["connections"][0]
+        self.assertEqual(data["messages"][0]["text"], "Existing message")
+        self.assertEqual(data["messages"][0]["kind"], "message")
+        self.assertEqual(data["floorProgress"]["counts"], {"1": 1, "2": 0})
+        self.assertEqual(data["puzzleOwners"][0]["pieces"][0]["shortLabel"], "Existing title")
+        self.assertIsNone(init_db(settings)["backup"])
+
     def question(self):
         return self.app.admin_action(
             self.admin,
@@ -181,9 +203,9 @@ class MatchingServiceTests(unittest.TestCase):
 
     def test_personal_schema_validation_missing_and_hard_trait(self):
         for uid, hobby in [
-            (self.a, "robotics"),
-            (self.b, "robotics"),
-            (self.admin, "coding"),
+            (self.a, "coding"),
+            (self.b, "coding"),
+            (self.admin, "reading"),
         ]:
             self.save_piece(uid)
             self.app.action(
@@ -205,7 +227,7 @@ class MatchingServiceTests(unittest.TestCase):
         result = self.matching.candidates(
             self.a,
             mode="trait",
-            trait={"category": "personal", "field": "hobbies", "value": "robotics"},
+            trait={"category": "personal", "field": "hobbies", "value": "coding"},
         )
         self.assertEqual([r["user_id"] for r in result["matches"]], [self.b])
         self.app.action(self.a, "savePersonalAnswers", {"answers": {"status": None}})

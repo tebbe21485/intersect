@@ -25,8 +25,8 @@ only when the configured database file does not exist. Existing database files
 are left untouched; use the `init` command above to explicitly migrate one.
 The browser defaults to the Reflex Cloud backend at
 `https://3aacb1ae-3cd2-44eb-b2f9-933a8360f096.fly.dev`. A configured
-`INTERSECT_API_URL` can replace it only when it is a non-local HTTPS URL;
-localhost values are ignored. Set `INTERSECT_ALLOWED_ORIGINS` in the backend
+`INTERSECT_API_URL` can replace it with an HTTP or HTTPS backend URL.
+Local browsers default to the same origin. Set `INTERSECT_ALLOWED_ORIGINS` in the backend
 environment to the exact public frontend origin, so credentialed API requests
 are accepted.
 
@@ -47,7 +47,7 @@ $env:INTERSECT_ALLOWED_ORIGINS="http://localhost:3000"
 .venv/Scripts/reflex.exe run --env dev --frontend-port 3000 --backend-port 8000
 ```
 
-Development hot reload watches `mule_hacks/`, `rxconfig.py`, and `assets/`. Database writes in `data/` do not trigger restarts. Restart the development command once after changing this watcher configuration. To capture startup or reload errors, append `--loglevel debug 2>&1 | Tee-Object -FilePath reflex.log` to the command.
+Development hot reload watches `mule_hacks/`, `backend/`, `components/`, `pages/`, `db_handler.py`, `rxconfig.py`, and `assets/`. Database writes in `data/` do not trigger restarts. Restart the development command once after changing this watcher configuration. To capture startup or reload errors, append `--loglevel debug 2>&1 | Tee-Object -FilePath reflex.log` to the command.
 
 Reflex 0.9.12 supports single-port mode only in production. Development uses one frontend port and one API port against the same database. Keep the terminal open; stop with **Ctrl+C**. Refresh after editing static JavaScript/CSS assets. Production mode requires restarting after changes. Before switching back to single-port production, clear the development settings with `$env:INTERSECT_API_URL=""` and `$env:INTERSECT_ALLOWED_ORIGINS=""`. Run the complete app; `--frontend-only` cannot serve the database API.
 
@@ -70,9 +70,9 @@ This asks for passwords for accounts that do not exist. It retains existing reco
 
 Open `/login?demo=1` and choose Juniper, Maple, River or Sage to try the browser-local shared puzzle in the existing connection chat. Each account has three sample connections and 4–8 personal pieces. In the **Puzzle** tab, select a piece, click **Share piece**, then click its colored SVG piece to read the description and author. Use **Sample accounts** in the messages sidebar to switch sides of a connection. Creating an account opens **Build your puzzle**, where you save 4–8 pieces with separate titles and descriptions. Titles appear in the clickable preview; descriptions open on click.
 
-The **Conversation** tab shows four floors and up to three optional suggestions. Both people must send two messages on each floor and separately approve advancing. Identity sharing unlocks after both complete Floor 2 and needs mutual consent in the **Identity** tab. Floor progress, demo messages and choices stay local to the current browser tab.
+The **Conversation** tab shows four floors and up to three optional suggestions. Both people must send two messages on each floor and separately approve advancing. Identity sharing unlocks after both complete Floor 2 and needs mutual consent in the **Identity** tab. Authenticated floor progress, readiness and sensitive-prompt choices are stored per connection in SQLite; explicitly selected sample accounts keep their demo state in the current browser tab.
 
-The React components compile through Reflex and use the existing CSS utilities. The authenticated builder saves pieces in the existing matching database and mirrors them into the local preview. Shared-puzzle reveal choices stay in the current browser tab. See [shared puzzle demo](docs/shared-puzzle-demo.md) for the files and local-state limits.
+The React components compile through Reflex and use the existing CSS utilities. The authenticated builder saves pieces in the existing matching database and mirrors them into the local preview. Authenticated puzzle shares synchronize through the database and create chat notices, as does floor readiness. Unshared peer titles and descriptions are omitted from API data. Labels fit across up to three SVG text lines. See [shared puzzle demo](docs/shared-puzzle-demo.md) for the files and local-state limits.
 
 ## Structure
 

@@ -142,7 +142,7 @@ export function prepareProvider(provider) {
     assert(typeof provider.simulateIdentityConsent === 'function');
     wrapped.simulateIdentityConsent = async input => assertConnection(await provider.simulateIdentityConsent(input));
   }
-  for (const method of ['saveProfile','proposeGroup','editGroupProposal','sharePhone','loadOlderMessages']) {
+  for (const method of ['saveProfile','proposeGroup','editGroupProposal','sharePhone','loadOlderMessages','shareConnectionPiece','setConnectionFloorReady','setConnectionSensitiveOptIn']) {
     if (typeof provider[method] === 'function') wrapped[method] = (...args) => provider[method](...args);
   }
   return wrapped;

@@ -17,6 +17,7 @@ from ..db_handler import Database
 from .application import ApplicationService
 from .auth import SESSION_SECONDS, PasswordAuth, Sessions
 from .errors import AppError
+from .validation import text
 from .services import RequestContext, SQLiteFrontendService
 
 COOKIE = "intersect_session"
@@ -93,6 +94,12 @@ def create_api(database=None, authentication=None, embedding_generator=None):
                     current = None
                 response = JSONResponse({"profile": current, "csrfToken": csrf})
                 cookie(response, CSRF_COOKIE, csrf, request)
+            elif path == "moderate-message":
+                # Local sample accounts have no authenticated identity. Check
+                # their messages with the same policy without saving content.
+                value = await payload(request)
+                await run_in_threadpool(text, value.get("text"), "Message", 1000)
+                response = JSONResponse({"ok": True})
             elif path in ("login", "register"):
                 value = await payload(request)
                 if adapter is None:
@@ -189,6 +196,7 @@ def create_api(database=None, authentication=None, embedding_generator=None):
         Route("/api/" + path, endpoint, methods=methods)
         for path, methods in (
             ("session", ["GET"]),
+            ("moderate-message", ["POST"]),
             ("login", ["POST"]),
             ("register", ["POST"]),
             ("logout", ["POST"]),

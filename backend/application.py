@@ -57,6 +57,9 @@ class ApplicationService:
             "deletePuzzlePiece",
             "savePersonalAnswers",
             "findMatches",
+            "shareConnectionPiece",
+            "setConnectionFloorReady",
+            "setConnectionSensitiveOptIn",
         }
         if not isinstance(method, str) or method not in allowed:
             raise AppError("That action is unavailable.", 404)
@@ -81,6 +84,8 @@ class ApplicationService:
         )
         with self.database.transaction(write=True) as c:
             r.actor(c, uid)
+            if method in ("shareConnectionPiece", "setConnectionFloorReady", "setConnectionSensitiveOptIn"):
+                return self.connection_action(c, uid, method, p)
             if method == "saveProfile":
                 fields = v.profile_fields(p)
                 c.execute(
@@ -246,6 +251,46 @@ class ApplicationService:
             )
 
     @staticmethod
+    def connection_notice(c, tid, uid, text, floor):
+        import uuid
+
+        c.execute("INSERT INTO directmessagebase(thread_id,sender_id,content,request_id,floor,kind) VALUES(?,?,?,?,?,'notice')",
+            (tid, uid, text, f"notice-{uuid.uuid4()}", floor))
+
+    def connection_action(self, c, uid, method, p):
+        tid = v.identifier(p.get("connectionId"))
+        _, peer = r.conversation(c, uid, tid)
+        progress = r.floor_progress(c, tid, [uid, peer])
+        floor = progress["currentFloor"]
+        if method == "shareConnectionPiece":
+            pid = v.identifier(p.get("pieceId"))
+            piece = r.one(c, "SELECT * FROM puzzlepiecebase WHERE piece_id=? AND user_id=?", (pid, uid), "You can only share your own pieces.")
+            if not c.execute("SELECT 1 FROM sharedpuzzlepiecebase WHERE thread_id=? AND piece_id=?", (tid, pid)).fetchone():
+                title = v.text(piece["title"] or piece["category"].replace("_", " ").title()[:20], "Title", 20)
+                description = v.text(piece["content"], "Description", 500)
+                c.execute("INSERT INTO sharedpuzzlepiecebase(thread_id,piece_id,owner_id,title,description) VALUES(?,?,?,?,?)", (tid, pid, uid, title, description))
+                self.connection_notice(c, tid, uid, f"I shared a puzzle piece: {title}.", floor)
+        else:
+            c.execute("INSERT OR IGNORE INTO connectionfloorbase(thread_id) VALUES(?)", (tid,))
+            c.execute("INSERT OR IGNORE INTO floorparticipantbase(thread_id,user_id) VALUES(?,?)", (tid, uid))
+            if method == "setConnectionSensitiveOptIn":
+                enabled = v.boolean(p.get("enabled"), "Sensitive prompts")
+                c.execute("UPDATE floorparticipantbase SET sensitive=? WHERE thread_id=? AND user_id=?", (enabled, tid, uid))
+            else:
+                ready = v.boolean(p.get("ready"), "Readiness")
+                if v.identifier(p.get("floor")) != floor:
+                    raise AppError("The floor changed. Review the current floor and try again.", 409)
+                if not progress["canAdvance"]:
+                    raise AppError("Both people need two messages on this floor before advancing.")
+                if progress["ready"][str(uid)] != ready:
+                    c.execute("UPDATE floorparticipantbase SET ready=? WHERE thread_id=? AND user_id=?", (ready, tid, uid))
+                    self.connection_notice(c, tid, uid, f"I'm ready for Floor {floor + 1}." if ready else f"I'm staying on Floor {floor} for now.", floor)
+                if r.floor_progress(c, tid, [uid, peer])["ready"] == {str(uid): True, str(peer): True}:
+                    c.execute("UPDATE connectionfloorbase SET current_floor=current_floor+1 WHERE thread_id=?", (tid,))
+                    c.execute("UPDATE floorparticipantbase SET ready=0 WHERE thread_id=?", (tid,))
+        return r.connection(c, uid, tid)
+
+    @staticmethod
     def message(c, table, key, tid, uid, p):
         value = v.text(p.get("text"), "Message", 1000)
         request = v.text(p.get("requestId"), "Request ID", 128, filtered=False)
@@ -259,10 +304,11 @@ class ApplicationService:
                     "This request ID was already used for a different message.", 409
                 )
             return
-        c.execute(
-            f"INSERT INTO {table}(thread_id,sender_id,content,request_id) VALUES(?,?,?,?)",
-            (tid, uid, value, request),
-        )
+        if table == "directmessagebase":
+            floor = c.execute("SELECT current_floor FROM connectionfloorbase WHERE thread_id=?", (tid,)).fetchone()
+            c.execute("INSERT INTO directmessagebase(thread_id,sender_id,content,request_id,floor) VALUES(?,?,?,?,?)", (tid, uid, value, request, floor[0] if floor else 1))
+        else:
+            c.execute(f"INSERT INTO {table}(thread_id,sender_id,content,request_id) VALUES(?,?,?,?)", (tid, uid, value, request))
 
     def connect(self, c, uid, p):
         kind = p.get("kind")
@@ -334,6 +380,8 @@ class ApplicationService:
                     "from": "me" if m["sender_id"] == uid else "them",
                     "text": m["content"],
                     "time": m["created_at"],
+                    "floor": m["floor"],
+                    "kind": m["kind"],
                 }
                 for m in reversed(records)
             ]

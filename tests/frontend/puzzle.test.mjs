@@ -1,7 +1,8 @@
 import test from 'node:test';
+import {formatPuzzleLabel} from '../../assets/services/puzzle-labels.mjs';
 import assert from 'node:assert/strict';
 import {PUZZLE_LAYOUTS, layoutSize, mixedPuzzleSlots} from '../../assets/services/puzzle-layouts.mjs';
-import {prepareProvider} from '../../assets/services/contracts.mjs';
+import {prepareProvider, ProviderError} from '../../assets/services/contracts.mjs';
 import {createPuzzleDemoProvider} from '../../assets/services/puzzle-demo-provider.mjs';
 import {readFileSync} from 'node:fs';
 
@@ -126,6 +127,19 @@ test('saved builder titles and descriptions keep sharing decisions through edits
   assert.equal(fresh.getConnectionPuzzle('another-connection', [profile.id, 'demo-maple'])[0].pieces[0].isShared, false);
 });
 
+test('piece labels wrap words and long unbroken titles within the SVG center', () => {
+  for (const title of ['Robotics', 'Robot projects', 'Watercolor painting', 'WWWWWWWWWWWWWWWWWWWW', '漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字']) {
+    const fitted = formatPuzzleLabel(title);
+    assert.ok(fitted.lines.length >= 1 && fitted.lines.length <= 3);
+    assert.ok(fitted.fontSize >= 8 && fitted.fontSize <= 14);
+    assert.ok(fitted.lines.length * fitted.lineHeight <= 54);
+    assert.equal(fitted.lines.join('').replace(/\s/g, ''), title.replace(/\s/g, ''));
+  }
+  assert.ok(formatPuzzleLabel('Robot projects').lines.length > 1);
+  assert.deepEqual(formatPuzzleLabel('Watercolor painting').lines, ['Watercolor', 'painting']);
+  assert.ok(formatPuzzleLabel('WWWWWWWWWWWWWWWWWWWW').fontSize < formatPuzzleLabel('Robotics').fontSize);
+});
+
 test('sample conversations satisfy the existing provider contract for every account', async () => {
   const store = await fixture();
   const originalFetch = globalThis.fetch;
@@ -138,5 +152,38 @@ test('sample conversations satisfy the existing provider contract for every acco
       assert.equal(data.connections.length, 3);
       assert.ok(data.connections.every(c => c.peerId !== account.id && c.puzzleKey === c.id));
     }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('sample private chats moderate before saving, updating peers or counting floor progress', async () => {
+  const store = await fixture();
+  sessionStorage.setItem('intersect-connection-floors-v1', JSON.stringify({version: 1, connections: {}}));
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ok: true, json: async () => JSON.parse(readFileSync(new URL('../../assets/demo-data.json', import.meta.url), 'utf8'))});
+  try {
+    const checked = [];
+    let allowed = false;
+    const raw = await createPuzzleDemoProvider(store.DEMO_ACCOUNTS[0], {validateMessage: async text => {
+      checked.push(text);
+      if (!allowed) throw new ProviderError('Message was flagged for “fuck”.');
+    }});
+    const provider = prepareProvider(raw);
+    const before = await provider.load();
+    const connectionId = before.connections[0].id;
+    const {getConnectionState} = await import('../../assets/services/connection-state.mjs');
+    const counts = getConnectionState(connectionId, [before.profile.id, before.connections[0].peerId]).counts;
+    await assert.rejects(provider.sendMessage({connectionId, text: 'fuck', requestId: 'rejected'}), /flagged.*fuck/);
+    assert.deepEqual(await provider.load(), before);
+    assert.deepEqual(getConnectionState(connectionId, []).counts, counts);
+    raw.validateMessage = async () => { throw new ProviderError('Unable to reach the server.'); };
+    await assert.rejects(provider.sendMessage({connectionId, text: 'Hello', requestId: 'offline'}), /Unable to reach/);
+    assert.deepEqual(await provider.load(), before);
+    raw.validateMessage = async text => { checked.push(text); };
+    const sent = await provider.sendMessage({connectionId, text: 'Hello', requestId: 'accepted'});
+    assert.equal(sent.messages.length, before.connections[0].messages.length + 1);
+    const peer = store.DEMO_ACCOUNTS.find(account => account.id === before.connections[0].peerId);
+    const other = await createPuzzleDemoProvider(peer);
+    assert.equal((await other.load()).connections.find(c => c.id === connectionId).messages.at(-1).text, 'Hello');
+    assert.deepEqual(checked, ['fuck', 'Hello']);
   } finally { globalThis.fetch = originalFetch; }
 });

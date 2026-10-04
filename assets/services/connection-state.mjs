@@ -27,7 +27,7 @@ function participant(connection, id) {
 }
 function progress(connection) {
   const counts = Object.fromEntries(connection.participantIds.map(id => [id, Math.min(MIN_MESSAGES_PER_USER,
-    connection.messages.filter(message => message.floor === connection.currentFloor && message.ownerId === id).length)]));
+    connection.messages.filter(message => message.kind !== 'notice' && message.floor === connection.currentFloor && message.ownerId === id).length)]));
   const minimumMet = connection.participantIds.every(id => counts[id] >= MIN_MESSAGES_PER_USER);
   return {...connection, counts, canAdvance: connection.currentFloor < 4 && minimumMet,
     identityAvailable: connection.currentFloor > 2 || (connection.currentFloor === 2 && minimumMet),
@@ -49,7 +49,7 @@ export function observeMessages(key, ids, messages) {
   }
   save(state);
 }
-export function sendConnectionMessage(key, userId, text, requestId = crypto.randomUUID()) {
+export function sendConnectionMessage(key, userId, text, requestId = crypto.randomUUID(), kind = 'message') {
   if (typeof text !== 'string' || !text.trim() || text.trim().length > 1000) throw new Error('Write a message of 1 to 1000 characters.');
   const state = read(), connection = state.connections[key];
   if (!connection) throw new Error('Choose a connection first.');
@@ -59,7 +59,7 @@ export function sendConnectionMessage(key, userId, text, requestId = crypto.rand
     if (duplicate.text !== text.trim()) throw new Error('This request was already used for another message.');
     return;
   }
-  connection.messages.push({id: crypto.randomUUID(), ownerId: userId, text: text.trim(), time: 'Just now', requestId, floor: connection.currentFloor});
+  connection.messages.push({id: crypto.randomUUID(), ownerId: userId, text: text.trim(), time: 'Just now', requestId, floor: connection.currentFloor, kind});
   save(state);
 }
 export function setFloorReady(key, userId, ready) {
@@ -67,6 +67,11 @@ export function setFloorReady(key, userId, ready) {
   if (!connection) throw new Error('Choose a connection first.');
   participant(connection, userId);
   if (!progress(connection).canAdvance) throw new Error('Both people need two messages on this floor first.');
+  if (Boolean(connection.ready[userId]) !== Boolean(ready)) {
+    connection.messages.push({id: crypto.randomUUID(), ownerId: userId,
+      text: ready ? `I'm ready for Floor ${connection.currentFloor + 1}.` : `I'm staying on Floor ${connection.currentFloor} for now.`,
+      time: 'Just now', floor: connection.currentFloor, kind: 'notice'});
+  }
   connection.ready[userId] = Boolean(ready);
   if (connection.participantIds.every(id => connection.ready[id])) {
     connection.currentFloor++;

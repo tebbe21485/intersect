@@ -1,6 +1,7 @@
 
 function PuzzlePiece({piece, slot, color, owner, onSelect, preview = false}) {
   const revealed = Boolean(piece?.isShared);
+  const label = revealed ? puzzleModules.formatPuzzleLabel(piece.shortLabel) : null;
   const activate = () => { if (revealed) onSelect(piece); };
   // Private labels/descriptions are never rendered in the SVG, including titles and ARIA.
   return <g className="puzzle-piece" transform={`translate(${slot.x} ${slot.y})`}
@@ -11,9 +12,10 @@ function PuzzlePiece({piece, slot, color, owner, onSelect, preview = false}) {
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(); }
     } : undefined}>
     <path d={slot.path} fill={revealed ? color : '#eee9df'} stroke="#fffdf8" strokeWidth="2" strokeLinejoin="round" />
-    {revealed ? <text x="50" y="53" textAnchor="middle" dominantBaseline="middle"
-      fill="white" fontSize={piece.shortLabel.length > 13 ? 9 : 13} fontWeight="600"
-      pointerEvents="none">{piece.shortLabel}</text> : null}
+    {revealed ? <text x="50" y={50 - (label.lines.length - 1) * label.lineHeight / 2} textAnchor="middle" dominantBaseline="middle"
+      fill="white" fontSize={label.fontSize} fontWeight="600" pointerEvents="none">
+      {label.lines.map((line, index) => <tspan key={index} x="50" dy={index ? label.lineHeight : 0}>{line}</tspan>)}
+    </text> : null}
   </g>;
 }
 
@@ -34,21 +36,29 @@ function PuzzlePieceDetail({piece, owner, onClose, preview = false}) {
 
 function SharePuzzlePiece({pieces, onShare}) {
   const [selectedId, setSelectedId] = PuzzleReact.useState('');
+  const [pending, setPending] = PuzzleReact.useState(false);
+  const [error, setError] = PuzzleReact.useState('');
   const selectId = PuzzleReact.useId();
   const unshared = pieces.filter(piece => !piece.isShared);
   const selected = unshared.find(piece => piece.id === selectedId);
   if (!unshared.length) return <p className="puzzle-note text-sm">You have shared all your pieces in this conversation.</p>;
   return <div className="puzzle-stack">
     <label htmlFor={selectId} className="puzzle-select-label">Share a little about you</label>
-    <select id={selectId} value={selected?.id || ''} onChange={event => setSelectedId(event.target.value)}
+    <select id={selectId} disabled={pending} value={selected?.id || ''} onChange={event => setSelectedId(event.target.value)}
       className="puzzle-select w-full text-sm">
       <option value="">Select a piece</option>
       {unshared.map(piece => <option key={piece.id} value={piece.id}>{piece.shortLabel}</option>)}
     </select>
-    <button type="button" disabled={!selected} onClick={() => { onShare(selected.id); setSelectedId(''); }}
+    <button type="button" disabled={!selected || pending} onClick={async () => {
+      setPending(true); setError('');
+      try { await onShare(selected.id); setSelectedId(''); }
+      catch (error) { setError(error.message); }
+      finally { setPending(false); }
+    }}
       className="btn primary w-full">
       Share piece
     </button>
+    {error ? <p role="alert">{error}</p> : null}
   </div>;
 }
 
@@ -86,9 +96,9 @@ function SharedPuzzle({owners, connectionId, currentUserId, onShare}) {
       <p className="puzzle-note text-xs">Blank pieces stay private. Select a colored piece to read its story.</p>
     </div>
     <PuzzlePieceDetail piece={selected} owner={owners.find(owner => owner.id === selected?.ownerId)} onClose={() => setSelectedId(null)} />
-    {current ? <SharePuzzlePiece pieces={current.pieces} onShare={id => {
+    {current ? <SharePuzzlePiece pieces={current.pieces} onShare={async id => {
       const piece = current.pieces.find(piece => piece.id === id);
-      onShare(id); setAnnouncement(`${piece.shortLabel} is now shared in this puzzle.`);
+      await onShare(id); setAnnouncement(`${piece.shortLabel} is now shared in this puzzle.`);
     }} /> : null}
     <p role="status" aria-live="polite" className="puzzle-note text-sm">{announcement}</p>
   </section>;
@@ -192,7 +202,7 @@ function PuzzleChat() {
   const {profile, connection} = chat;
   const key = connection.puzzleKey || `local:${profile.id}:${connection.id}`;
   const ids = [profile.id, connection.peerId || `peer:${connection.id}`].sort();
-  let owners = getConnectionPuzzle(key, ids);
+  let owners = connection.puzzleOwners || getConnectionPuzzle(key, ids);
   // Without a puzzle backend, an authenticated peer's local pieces are unavailable.
   owners = owners.map((owner, index) => owner || {
     id: ids[index], alias: ids[index] === profile.id ? profile.alias : connection.alias,
@@ -200,7 +210,16 @@ function PuzzleChat() {
     pieces: ids[index] === profile.id ? [] : Array.from({length: 4}, (_, i) => ({id: `${ids[index]}-blank-${i}`, ownerId: ids[index], shortLabel: '', description: '', isShared: false})),
   });
   return <ConnectionTools key={key} connectionId={key} owners={owners} profile={profile} connection={connection}
-    onShare={pieceId => sharePiece(key, profile.id, pieceId)} />;
+    onShare={async pieceId => {
+      if (connection.puzzleOwners) {
+        await window.intersectConnectionAction('shareConnectionPiece', {connectionId: connection.id, pieceId});
+      } else {
+        const piece = owners.find(owner => owner.id === profile.id).pieces.find(piece => piece.id === pieceId);
+        sharePiece(key, profile.id, pieceId);
+        await window.intersectConnectionAction('sendMessage', {connectionId: connection.id,
+          text: `I shared a puzzle piece: ${piece.shortLabel}.`, kind: 'notice', requestId: `share:${connection.id}:${pieceId}`});
+      }
+    }} />;
 }
 
 function PuzzleWidget({mode}) {
@@ -216,14 +235,16 @@ function PuzzleWidget({mode}) {
     const floorsPath = assetURL('/services/connection-state.mjs');
     const definitionsPath = assetURL('/data/connection-floors.mjs');
     const suggestionsPath = assetURL('/services/interaction-suggestions.mjs');
+    const labelsPath = assetURL('/services/puzzle-labels.mjs');
     Promise.all([
       import(/* @vite-ignore */ storePath),
       import(/* @vite-ignore */ layoutsPath),
       import(/* @vite-ignore */ floorsPath),
       import(/* @vite-ignore */ definitionsPath),
       import(/* @vite-ignore */ suggestionsPath),
-    ]).then(([store, layouts, floors, definitions, suggestions]) => {
-      puzzleModules = {...store, ...layouts, ...floors, ...definitions, ...suggestions};
+      import(/* @vite-ignore */ labelsPath),
+    ]).then(([store, layouts, floors, definitions, suggestions, labels]) => {
+      puzzleModules = {...store, ...layouts, ...floors, ...definitions, ...suggestions, ...labels};
       if (!disposed) setReady(true);
     }).catch(() => { if (!disposed) setError(true); });
     return () => { disposed = true; };

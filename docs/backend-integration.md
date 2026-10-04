@@ -13,7 +13,7 @@ Modular Reflex pages + browser rendering
 
 ## Database and migrations
 
-Schema version 2 adds connection matching storage. See [connection matching](connection-matching.md) for the upgrade, model preparation, cached-vector lifecycle and matching API. Candidate scoring includes both public and private polls, excludes identity/contact fields, and keeps private poll statistics hidden.
+Schema version 4 adds connection-specific puzzle shares, floor readiness, opt-ins and message notice metadata alongside matching storage. See [connection matching](connection-matching.md) for the upgrade, model preparation, cached-vector lifecycle and matching API. Candidate scoring includes both public and private polls, excludes identity/contact fields, and keeps private poll statistics hidden.
 
 `SQLiteSettings.from_environment()` reads `INTERSECT_DB_PATH` at use time; relative paths resolve from the project root. Default: `data/intersect.sqlite3`. Initialization is explicit: `python -m mule_hacks.backend.cli init`. Importing the app never creates or migrates a database. Each SQL operation runs in its own worker thread and connection with foreign keys enabled; writes use `BEGIN IMMEDIATE`, commit before responding, and roll back on failure.
 
@@ -36,8 +36,9 @@ Every write requires JSON, a recognized Origin and the CSRF token issued by `GET
 | `GET /api/messages?connectionId={id}&before={messageId}` | Earlier participant-only direct messages |
 | `GET /api/admin` | Protected activities, group review and report queues |
 | `POST /api/admin/action` | Protected activity/group editing and moderation |
+| `POST /api/moderate-message` | CSRF-protected word-filter check for local sample messages; no account required and no content saved |
 
-Use production single-port mode (`reflex run --env prod --single-port`) for the simplest cookie/origin setup. Reflex Cloud may serve the frontend and backend on separate origins: the browser defaults to this deployment's Fly backend; a different `INTERSECT_API_URL` is used only when it is a non-local HTTPS URL. Set `INTERSECT_ALLOWED_ORIGINS` to the exact frontend origin in the backend environment. Credentialed cross-origin requests use Secure, SameSite=None cookies over HTTPS. No wildcard credentialed CORS is configured.
+Use production single-port mode (`reflex run --env prod --single-port`) for the simplest cookie/origin setup. Reflex Cloud may serve the frontend and backend on separate origins: the browser defaults to this deployment's Fly backend; an explicit HTTP or HTTPS `INTERSECT_API_URL` overrides it. Local browsers otherwise use the same origin. Set `INTERSECT_ALLOWED_ORIGINS` to the exact frontend origin in the backend environment. Credentialed cross-origin requests use Secure, SameSite=None cookies over HTTPS. No wildcard credentialed CORS is configured.
 
 ## View models and operations
 
@@ -54,7 +55,7 @@ Admin operations are `saveQuestion`, `savePoll`, `saveGroup`, `reviewGroup`, `re
 - Public polls return percentages; private polls return null percentages/totals and no choice counts to ordinary users. Admin aggregates are available only through protected routes. Voter identity is never exposed by the visibility toggle.
 - Responses, board posts and group messages show server-assigned aliases. Peer first/last name and optional LinkedIn are returned only after mutual identity consent. Phone is returned only after its owner independently shares it with that connection; profile edits reset phone-sharing choices.
 - Every direct read/write checks participation, conversation state and directional blocks. Report-and-block is atomic; messages and reports remain available for protected moderation history. The admin report queue includes the latest 100 messages as review evidence.
-- `better-profanity` rejects flagged text on initial writes and edits. Drafts remain available to revise. This is the requested basic word-list filter; it does not implement broader automated moderation.
+- `better-profanity` rejects flagged text on initial writes and edits, identifying the submitted word or phrase in the error message. Drafts remain available to revise. This is the requested basic word-list filter; it does not implement broader automated moderation.
 - Visible pages refresh from SQLite-backed services every two seconds. Message cursors request only new direct messages; metadata still refreshes so consent, blocks and previews remain current. Writes and stale refreshes are coordinated; selected activities, unsent drafts, message focus/selection, scroll and open dialogs are preserved. Loading/connection errors are retryable and never invent records.
 - Snapshots bound activity/board/group histories to the latest 100 records; direct chats can load earlier messages in pages of 100. Broader event-scale feed pagination can be added later if needed.
 - Challenge completion derives from a stored message sent by the current user.
@@ -64,3 +65,13 @@ Admin operations are `saveQuestion`, `savePoll`, `saveGroup`, `reviewGroup`, `re
 MATCH-01 v1 is implemented; [connection matching](connection-matching.md) documents the approved formula, stored inputs, modes and remaining threshold/stance tuning.
 
 AUTH-02: select the conference registration system/protocol and implement an adapter/account linking. Email verification, password-reset delivery and deployment-specific session/login policies remain deployment work.
+
+Authenticated connection actions use the existing `POST /api/action` boundary:
+
+| Method | Input |
+| --- | --- |
+| `shareConnectionPiece` | `{connectionId, pieceId}`; only your own saved piece |
+| `setConnectionFloorReady` | `{connectionId, floor, ready}`; both people need two normal messages on that floor |
+| `setConnectionSensitiveOptIn` | `{connectionId, enabled}`; both people must opt in |
+
+Snapshots include `puzzleOwners` (peer private text omitted), `floorProgress`, and message `kind`/`floor`. Sharing and readiness produce ordinary chat-visible notices with `kind: "notice"`; these do not count toward progression. Shares are idempotent and scoped to one connection.

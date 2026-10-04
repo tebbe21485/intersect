@@ -1,13 +1,14 @@
 /**
  * Local demo implementation of DataProvider. All fabricated users, matches,
  * identities and storage belong here, never in presentation/event handlers.
- * Replace this provider when the backend is ready; no API is connected now.
+ * Messages use the backend word filter before entering local demo state.
  */
 import {assertAppData, ProviderError} from './contracts.mjs';
 
 export const DEMO_STORAGE_KEY = 'intersect-demo-data-v2';
 const LEGACY_STORAGE_KEY = 'intersect-demo-v1';
 const copy = value => structuredClone(value);
+const moderateMessage = async message => (await import('./http.mjs')).moderateMessage(message);
 const text = (value, max) => {
   if (typeof value !== 'string' || !value.trim() || value.trim().length > max) {
     throw new ProviderError(`Please enter between 1 and ${max} characters.`);
@@ -57,9 +58,10 @@ function initialData(seed, legacy) {
 /** @implements {import('./contracts.mjs').DataProvider} */
 export class DemoProvider {
   capabilities = {simulateIdentityConsent: true};
-  constructor(seed, {storage = null, newId = () => crypto.randomUUID()} = {}) {
+  constructor(seed, {storage = null, newId = () => crypto.randomUUID(), validateMessage = moderateMessage} = {}) {
     this.storage = storage;
     this.newId = newId;
+    this.validateMessage = validateMessage;
     const stored = read(storage, DEMO_STORAGE_KEY);
     try {
       this.data = stored?.version === 1 ? assertAppData(stored.data) : assertAppData(initialData(seed, read(storage, LEGACY_STORAGE_KEY)));
@@ -133,9 +135,10 @@ export class DemoProvider {
     });
   }
   async sendMessage({connectionId, text: message}) {
+    const content = text(message, 1000);
+    await this.validateMessage(content);
     return this._commit(data => {
       const connection = this._find(data.connections, connectionId);
-      const content = text(message, 1000);
       connection.messages.push({id: this.newId(), from: 'me', text: content, time: 'Just now'});
       connection.preview = content; connection.time = 'Just now';
       return connection;
@@ -149,10 +152,12 @@ export class DemoProvider {
     });
   }
   async sendGroupMessage({groupId, text: message}) {
+    const content = text(message, 1000);
+    await this.validateMessage(content);
     return this._commit(data => {
       const group = this._find(data.groups, groupId);
       if (!group.joined) throw new ProviderError('Join the discussion before sending a message.');
-      group.messages.push({id: this.newId(), alias: 'You', from: 'me', text: text(message, 1000), time: 'Just now'});
+      group.messages.push({id: this.newId(), alias: 'You', from: 'me', text: content, time: 'Just now'});
       return group;
     });
   }

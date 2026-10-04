@@ -22,7 +22,7 @@ else:
 # Database writes must not restart the backend or reinstall frontend packages.
 # Relative paths avoid the colon-delimited setting splitting Windows drive names.
 os.environ.setdefault(
-    "REFLEX_HOT_RELOAD_OVERRIDE_PATHS", "mule_hacks:rxconfig.py:assets"
+    "REFLEX_HOT_RELOAD_OVERRIDE_PATHS", "mule_hacks:backend:components:pages:db_handler.py:rxconfig.py:assets"
 )
 
 config = rx.Config(

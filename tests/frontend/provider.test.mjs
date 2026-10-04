@@ -13,7 +13,7 @@ function storage(initial = {}) {
 }
 function fixture(store = storage()) {
   let counter = 0;
-  const raw = new DemoProvider(seed, {storage: store, newId: () => `new-${++counter}`});
+  const raw = new DemoProvider(seed, {storage: store, newId: () => `new-${++counter}`, validateMessage: async () => {}});
   return {raw, provider: prepareProvider(raw), store};
 }
 
@@ -179,6 +179,22 @@ test('backend activity collections allow empty lists and private polls without a
   assert.throws(() => assertPoll({...privatePoll, totalVotes:1}), ProviderError);
   privatePoll.choices[0].count = 1;
   assert.throws(() => assertPoll(privatePoll), ProviderError);
+});
+
+test('local private and group messages wait for moderation and preserve state on rejection or outage', async () => {
+  const {raw, provider, store} = fixture();
+  const before = await provider.load();
+  const saved = store.getItem(DEMO_STORAGE_KEY);
+  const checked = [];
+  raw.validateMessage = async text => { checked.push(text); throw new ProviderError('Message was flagged for “shit”.'); };
+  await assert.rejects(provider.sendMessage({connectionId: before.connections[0].id, text: 'This is shit'}), /flagged.*shit/);
+  await assert.rejects(provider.sendGroupMessage({groupId: before.groups[0].id, text: 'This is shit'}), /flagged.*shit/);
+  assert.deepEqual(checked, ['This is shit', 'This is shit']);
+  assert.equal(store.getItem(DEMO_STORAGE_KEY), saved);
+  assert.deepEqual(await provider.load(), before);
+  raw.validateMessage = async () => { throw new ProviderError('Unable to reach the server.'); };
+  await assert.rejects(provider.sendMessage({connectionId: before.connections[0].id, text: 'Hello'}), /Unable to reach/);
+  assert.deepEqual(await provider.load(), before);
 });
 
 test('default production provider reports an unavailable backend without fabricated fallback', async () => {

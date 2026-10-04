@@ -13,7 +13,7 @@ class PuzzleWidget(rx.Component):
         return {"react": [rx.ImportVar(tag="React", is_default=True, alias="PuzzleReact")]}
 
     def add_custom_code(self):
-        source = Path(__file__).resolve().parents[2] / "assets" / "shared-puzzle.jsx"
+        source = Path(__file__).resolve().parents[1] / "assets" / "shared-puzzle.jsx"
         tools = source.with_name("connection-tools.jsx")
         return [source.read_text(encoding="utf-8") + "\n" + tools.read_text(encoding="utf-8")]
 

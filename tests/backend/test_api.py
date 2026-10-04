@@ -12,6 +12,7 @@ from starlette.testclient import TestClient
 
 from mule_hacks.backend.api import COOKIE, create_api
 from mule_hacks.backend.sqlite import SQLiteSettings
+from mule_hacks.backend.migrations import VERSION
 from mule_hacks.db_handler import Database, init_db
 from mule_hacks.mule_hacks import initialize_database
 
@@ -38,7 +39,7 @@ class APITests(unittest.TestCase):
                         connection.execute(
                             "SELECT MAX(version) FROM schema_migrations"
                         ).fetchone()[0],
-                        1,
+                        VERSION,
                     )
                     connection.execute(
                         "INSERT INTO userbase(email,password_hash,first_name,last_name,alias) "
@@ -215,3 +216,24 @@ class APITests(unittest.TestCase):
         client.cookies.set(COOKIE, "opaque")
         self.assertEqual(client.get("/api/load").status_code, 503)
         self.assertFalse(Path(settings.path).exists())
+
+    def test_sample_message_moderation_requires_csrf_and_never_saves_content(self):
+        self.assertEqual(self.client.post("/api/moderate-message", json={"text": "Hello"}).status_code, 403)
+        self.assertEqual(self.client.get("/api/load").status_code, 401)
+        with self.database.transaction() as c:
+            before = (c.execute("SELECT COUNT(*) FROM userbase").fetchone()[0],
+                      c.execute("SELECT COUNT(*) FROM directmessagebase").fetchone()[0])
+        for word in ("fuck", "shit", "fucking", "bitch", "bullshit", "damn", "asshole", "sh1t", "f*ck"):
+            with self.subTest(word=word):
+                response = self.post("moderate-message", {"text": f"This is {word}."})
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(word, response.json()["message"])
+                self.assertIn("flagged", response.json()["message"])
+        response = self.post("moderate-message", {"text": "Hello, how was your day?"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"ok": True})
+        for value in (None, "", "a" * 1001):
+            self.assertEqual(self.post("moderate-message", {"text": value}).status_code, 400)
+        with self.database.transaction() as c:
+            self.assertEqual(before, (c.execute("SELECT COUNT(*) FROM userbase").fetchone()[0],
+                                     c.execute("SELECT COUNT(*) FROM directmessagebase").fetchone()[0]))

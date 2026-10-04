@@ -100,14 +100,14 @@ def api_config():
     parsed_api_base_url = urlsplit(configured_api_base_url)
     api_base_url = (
         configured_api_base_url
-        if parsed_api_base_url.scheme == "https"
+        if parsed_api_base_url.scheme in {"http", "https"}
         and parsed_api_base_url.hostname
-        and parsed_api_base_url.hostname not in {"localhost", "127.0.0.1", "::1"}
         else cloud_api_base_url
     )
     return rx.script(
         "window.intersectApiBaseURL = "
-        + json.dumps(api_base_url)
+        + (json.dumps(api_base_url) if configured_api_base_url else
+           "(['localhost','127.0.0.1','0.0.0.0','[::1]'].includes(window.location.hostname) ? '' : " + json.dumps(cloud_api_base_url) + ")")
         + ";"
     )
 

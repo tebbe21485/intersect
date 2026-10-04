@@ -8,6 +8,9 @@ export async function createBackendProvider() {
     provider[method] = input => action(method, input);
   }
   provider.matchingProfile = () => request('matching/profile');
+  for (const method of ['shareConnectionPiece', 'setConnectionFloorReady', 'setConnectionSensitiveOptIn']) {
+    provider[method] = input => action(method, input);
+  }
   provider.loadOlderMessages = ({connectionId, before}) => request(`messages?connectionId=${encodeURIComponent(connectionId)}&before=${encodeURIComponent(before)}`);
   return provider;
 }
