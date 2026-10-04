@@ -39,13 +39,14 @@ def create_api(database=None, authentication=None, embedding_generator=None):
     secure = os.getenv("INTERSECT_SECURE_COOKIES", "").lower() in ("1", "true")
 
     def cookie(response, key, value, request, max_age=SESSION_SECONDS):
+        is_secure = secure or request.url.scheme == "https"
         response.set_cookie(
             key,
             value,
             max_age=max_age,
             httponly=True,
-            secure=secure or request.url.scheme == "https",
-            samesite="lax",
+            secure=is_secure,
+            samesite="none" if is_secure else "lax",
             path="/",
         )
 

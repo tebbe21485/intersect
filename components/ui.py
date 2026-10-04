@@ -1,7 +1,8 @@
 """HTML-based Reflex components preserve the original CSS and semantics."""
 
-import os
 import json
+import os
+from urllib.parse import urlsplit
 
 import reflex as rx
 from reflex_components_core.react_router.dom import ReactRouterLink
@@ -94,9 +95,19 @@ def demo_script():
 
 
 def api_config():
+    cloud_api_base_url = "https://3aacb1ae-3cd2-44eb-b2f9-933a8360f096.fly.dev"
+    configured_api_base_url = os.getenv("INTERSECT_API_URL", "").strip().rstrip("/")
+    parsed_api_base_url = urlsplit(configured_api_base_url)
+    api_base_url = (
+        configured_api_base_url
+        if parsed_api_base_url.scheme == "https"
+        and parsed_api_base_url.hostname
+        and parsed_api_base_url.hostname not in {"localhost", "127.0.0.1", "::1"}
+        else cloud_api_base_url
+    )
     return rx.script(
         "window.intersectApiBaseURL = "
-        + json.dumps(os.getenv("INTERSECT_API_URL", ""))
+        + json.dumps(api_base_url)
         + ";"
     )
 

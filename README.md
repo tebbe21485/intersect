@@ -17,6 +17,24 @@ $adminEmail = Read-Host "Email address for your admin account"
 .venv/Scripts/reflex.exe run --env prod --single-port --backend-port 3000
 ```
 
+`reflex deploy` deploys the Reflex frontend and Python backend together. Keep
+`requirements.txt` in sync with `pyproject.toml`; the hosted backend installs
+from `requirements.txt`, including the password-hashing and content-filtering
+dependencies. On backend startup, the app initializes a fresh SQLite schema
+only when the configured database file does not exist. Existing database files
+are left untouched; use the `init` command above to explicitly migrate one.
+The browser defaults to the Reflex Cloud backend at
+`https://3aacb1ae-3cd2-44eb-b2f9-933a8360f096.fly.dev`. A configured
+`INTERSECT_API_URL` can replace it only when it is a non-local HTTPS URL;
+localhost values are ignored. Set `INTERSECT_ALLOWED_ORIGINS` in the backend
+environment to the exact public frontend origin, so credentialed API requests
+are accepted.
+
+Reflex Cloud's included SQLite database is not persistent across app restarts.
+Do not use it for production accounts or messages; this backend currently uses
+SQLite and needs a persistent database service before it can safely host
+production data.
+
 The admin command asks for a password when creating a new account. It can also promote an existing registered account. No default admin credentials are installed. Open the URL Reflex prints, sign in, and use **Manage community** (`/admin`) to publish questions/polls and create or approve groups.
 
 Sign in with the exact email supplied to `--email` and the password you entered in the terminal. Promoting an existing account keeps its original password; running the admin command again does not reset it. If you previously copied `--email your-email@example.com` literally, that is the registered address. Run the admin command with your intended email to create or promote that account instead. Port 3001 works for single-port production by changing `--backend-port 3000` to `--backend-port 3001`.
