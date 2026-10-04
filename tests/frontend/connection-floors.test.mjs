@@ -102,6 +102,27 @@ test('retries, duplicate observations and older history cannot add floor progres
   assert.equal(reloaded.getConnectionState('pair', ['a', 'b']).currentFloor, 2);
 });
 
+test('sample identity notices appear only after mutual approval, once per user, without adding floor progress', async () => {
+  const store = await fixture();
+  talk(store, 1); advance(store); talk(store, 2);
+  const information = {a: {name: 'Alex Example', linkedin: 'https://www.linkedin.com/in/alex-example'}, b: {name: 'Sam Example'}};
+  const before = store.getConnectionState('pair', []).messages.length;
+  store.setIdentityConsent('pair', 'a', true, information);
+  assert.equal(store.getConnectionState('pair', []).messages.length, before);
+  store.setIdentityConsent('pair', 'b', true, information);
+  const shared = store.getConnectionState('pair', []);
+  const notices = shared.messages.slice(before);
+  assert.equal(notices.length, 2);
+  assert.ok(notices[0].text.includes(information.a.name));
+  assert.ok(notices[0].text.includes(information.a.linkedin));
+  assert.ok(notices[1].text.includes('Sam Example. LinkedIn: not provided'));
+  assert.ok(notices.every(message => message.kind === 'notice' && message.floor === 2));
+  assert.deepEqual(shared.counts, {a: 2, b: 2});
+  store.setIdentityConsent('pair', 'a', true, information);
+  store.setIdentityConsent('pair', 'b', true, information);
+  assert.equal(store.getConnectionState('pair', []).messages.length, before + 2);
+});
+
 test('suggestions stay on the current floor, with two related and one different prompt', () => {
   for (let floor = 1; floor <= 4; floor++) {
     const suggestions = suggestInteractions({floor, recentMessages: [{text: 'I like hiking outdoors and traveling with friends.'}]});

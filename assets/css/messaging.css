@@ -1,3 +1,10 @@
+.chat-messages .message a {
+  display: inline;
+  font-size: inherit;
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+
 /* Group threads use the main workspace without changing app navigation. */
 .group-thread-open .main-content {
   max-width: none;

@@ -199,6 +199,8 @@ class ApplicationService:
                 "cancelIdentityReveal",
                 "sharePhone",
             ):
+                before = r.connection(c, uid, tid)
+                floor = before["floorProgress"]["currentFloor"]
                 c.execute(
                     "INSERT OR IGNORE INTO consentbase(thread_id,user_id) VALUES(?,?)",
                     (tid, uid),
@@ -211,6 +213,8 @@ class ApplicationService:
                         "UPDATE consentbase SET phone_shared=? WHERE thread_id=? AND user_id=?",
                         (int(share), tid, uid),
                     )
+                    if share and not before["phoneShared"]:
+                        self.connection_notice(c, tid, uid, f"I shared my phone number: {r.actor(c, uid)['phone']}", floor)
                 else:
                     if (
                         method == "cancelIdentityReveal"
@@ -223,6 +227,12 @@ class ApplicationService:
                         "UPDATE consentbase SET identity_reveal=? WHERE thread_id=? AND user_id=?",
                         (int(method == "requestIdentityReveal"), tid, uid),
                     )
+                    if method == "requestIdentityReveal" and before["reveal"] != "revealed" and before["peerConsent"]:
+                        for owner in sorted((uid, peer)):
+                            person = r.actor(c, owner)
+                            name = f"{person['first_name']} {person['last_name']}".strip()
+                            self.connection_notice(c, tid, owner,
+                                f"I shared my information: {name}. LinkedIn: {person['linkedin'] or 'not provided'}", floor)
             elif method in ("endConversation", "reportConnection", "blockConnection"):
                 if method == "reportConnection":
                     reason = v.text(p.get("reason"), "Report reason", 500)

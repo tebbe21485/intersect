@@ -26,6 +26,10 @@
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
   const escape = (value = '') => String(value).replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char]));
+  const messageText = message => message.kind === 'notice'
+    ? message.text.split(/(https:\/\/(?:www\.)?linkedin\.com\/[^\s]+)/g).map((part, index) => index % 2
+      ? `<a href="${escape(part)}" target="_blank" rel="noopener noreferrer" class="text-link">${escape(part)}</a>` : escape(part)).join('')
+    : escape(message.text);
   const paths = {
     'leaf': '<path d="M11 20A7 7 0 0 1 4 13C4 4 20 3 20 3s-1 16-10 16m-7 3L16 9"/>',
     'palette': '<path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4c-1-1 0-3 2-3h2a3 3 0 0 0 3-3 9 9 0 0 0-9-8Z"/><circle cx="7" cy="10" r=".5"/><circle cx="10" cy="7" r=".5"/><circle cx="15" cy="7" r=".5"/>',
@@ -261,7 +265,7 @@
       <button type="button" class="icon-button mobile-back" data-action="back-messages" aria-label="Back to messages">${icon('arrow-left', 20)}</button>
       ${avatar(c.alias, c.color, true)}<div><h3>${escape(name(c))}</h3><span class="muted text-xs">${c.reveal === 'revealed' ? 'Identity mutually revealed' : 'Anonymous connection'}</span></div>
       </header><div class="chat-context">${icon('lock', 14)}${c.reveal === 'revealed' ? 'You both agreed to share your identities.' : `Connected through ${escape(c.source.toLowerCase())} · ${escape(c.shared)}`}</div>
-      <div class="chat-messages" role="log" aria-label="Conversation messages" aria-live="polite">${c.hasOlderMessages ? button('Load earlier messages', 'older-messages', '', 'secondary') : ''}<p class="chat-date">This is the beginning of something good</p>${c.messages.map(m => `<div class="message ${m.from === 'me' ? 'me' : 'them'}"><p>${escape(m.text)}</p><span>${m.from === 'me' ? 'You' : escape(name(c))} · ${escape(displayTime(m.time))}</span></div>`).join('')}</div>
+      <div class="chat-messages" role="log" aria-label="Conversation messages" aria-live="polite">${c.hasOlderMessages ? button('Load earlier messages', 'older-messages', '', 'secondary') : ''}<p class="chat-date">This is the beginning of something good</p>${c.messages.map(m => `<div class="message ${m.from === 'me' ? 'me' : 'them'}"><p>${messageText(m)}</p><span>${m.from === 'me' ? 'You' : escape(name(c))} · ${escape(displayTime(m.time))}</span></div>`).join('')}</div>
       <div class="chat-bottom">
       <form class="message-form" data-form="message"><input name="message" aria-label="Message" placeholder="Write a thoughtful hello…" maxlength="1000" autocomplete="off" required/><button class="btn primary" type="submit" aria-label="Send message" disabled>${icon('send', 18)}</button></form>
       <div class="chat-controls">

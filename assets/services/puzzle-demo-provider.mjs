@@ -55,7 +55,8 @@ export async function createPuzzleDemoProvider(account, options = {}) {
   };
   provider.requestIdentityReveal = async ({connectionId}) => {
     const connection = find(connectionId);
-    apply(() => setIdentityConsent(connection.id, account.id, true));
+    apply(() => setIdentityConsent(connection.id, account.id, true,
+      Object.fromEntries(Object.entries(identities).map(([id, name]) => [id, {name}]))));
     return project(connection);
   };
   provider.cancelIdentityReveal = async ({connectionId}) => {

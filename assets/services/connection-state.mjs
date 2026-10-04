@@ -86,12 +86,21 @@ export function setSensitiveOptIn(key, userId, enabled) {
   connection.sensitive[userId] = Boolean(enabled);
   save(state);
 }
-export function setIdentityConsent(key, userId, enabled) {
+export function setIdentityConsent(key, userId, enabled, sharedIdentities = null) {
   const state = read(), connection = state.connections[key];
   if (!connection) throw new Error('Choose a connection first.');
   participant(connection, userId);
   if (!progress(connection).identityAvailable) throw new Error('Identity sharing is available after both people complete floor 2.');
-  if (!enabled && connection.participantIds.every(id => connection.identityConsent[id])) throw new Error('Identity has already been revealed.');
+  const alreadyShared = connection.participantIds.every(id => connection.identityConsent[id]);
+  if (!enabled && alreadyShared) throw new Error('Identity has already been revealed.');
   connection.identityConsent[userId] = Boolean(enabled);
+  if (sharedIdentities && !alreadyShared && connection.participantIds.every(id => connection.identityConsent[id])) {
+    for (const ownerId of connection.participantIds) {
+      const person = sharedIdentities[ownerId];
+      connection.messages.push({id: crypto.randomUUID(), ownerId,
+        text: `I shared my information: ${person.name}. LinkedIn: ${person.linkedin || 'not provided'}`,
+        time: 'Just now', floor: connection.currentFloor, kind: 'notice'});
+    }
+  }
   save(state);
 }

@@ -8,6 +8,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
+from unittest.mock import patch
 
 from mule_hacks.backend.application import ApplicationService
 from mule_hacks.backend.auth import PasswordAuth, Sessions
@@ -374,6 +375,59 @@ class ApplicationTests(unittest.TestCase):
         self.assertIsNone(self.service.load(self.a)["connections"][0]["phone"])
         self.service.action(self.a, "sharePhone", {"connectionId": tid, "share": False})
         self.assertIsNone(self.service.load(self.b)["connections"][0]["phone"])
+
+    def test_identity_sharing_notices_wait_for_mutual_consent_and_are_idempotent(self):
+        tid = self.conversation()["id"]
+        self.service.action(self.a, "requestIdentityReveal", {"connectionId": tid})
+        self.service.action(self.a, "requestIdentityReveal", {"connectionId": tid})
+        self.assertEqual(self.service.load(self.b)["connections"][0]["messages"], [])
+        revealed = self.service.action(self.b, "requestIdentityReveal", {"connectionId": tid})
+        notices = revealed["messages"]
+        self.assertEqual(len(notices), 2)
+        self.assertEqual({message["from"] for message in notices}, {"me", "them"})
+        for person in self.people[:2]:
+            self.assertTrue(any(person["name"] in message["text"] and person["linkedin"] in message["text"] for message in notices))
+            self.assertTrue(all(person["phone"] not in message["text"] for message in notices))
+        self.assertTrue(all(message["kind"] == "notice" for message in notices))
+        self.assertTrue(all(count == 0 for count in revealed["floorProgress"]["counts"].values()))
+        for uid in (self.a, self.b):
+            repeated = self.service.action(uid, "requestIdentityReveal", {"connectionId": tid})
+            self.assertEqual(len(repeated["messages"]), 2)
+        self.assertEqual(len(self.service.load(self.a, json.dumps({tid: notices[0]["id"]}))["connections"][0]["messages"]), 1)
+
+    def test_phone_sharing_posts_only_new_shares_without_revealing_unapproved_identity(self):
+        tid = self.conversation()["id"]
+        payload = {"connectionId": tid, "share": True}
+        self.service.action(self.a, "sharePhone", payload)
+        shared = self.service.load(self.b)["connections"][0]
+        self.assertEqual(len(shared["messages"]), 1)
+        self.assertIn(self.people[0]["phone"], shared["messages"][0]["text"])
+        self.assertNotIn(self.people[0]["name"], shared["messages"][0]["text"])
+        self.assertIsNone(shared["identity"])
+        self.assertEqual(shared["messages"][0]["kind"], "notice")
+        self.assertTrue(all(count == 0 for count in shared["floorProgress"]["counts"].values()))
+        self.assertEqual(len(self.service.action(self.a, "sharePhone", payload)["messages"]), 1)
+        self.service.action(self.a, "sharePhone", {"connectionId": tid, "share": False})
+        self.assertEqual(len(self.service.load(self.b)["connections"][0]["messages"]), 1)
+        self.assertEqual(len(self.service.action(self.a, "sharePhone", payload)["messages"]), 2)
+        with self.assertRaises(AppError):
+            self.service.action(self.admin, "sharePhone", payload)
+
+    def test_contact_notices_and_sharing_permissions_commit_atomically(self):
+        tid = self.conversation()["id"]
+        self.service.action(self.a, "requestIdentityReveal", {"connectionId": tid})
+        with patch.object(ApplicationService, "connection_notice", side_effect=RuntimeError("Notice failed")):
+            with self.assertRaises(RuntimeError):
+                self.service.action(self.b, "requestIdentityReveal", {"connectionId": tid})
+        after = self.service.load(self.a)["connections"][0]
+        self.assertFalse(after["peerConsent"])
+        self.assertEqual(after["messages"], [])
+        with patch.object(ApplicationService, "connection_notice", side_effect=RuntimeError("Notice failed")):
+            with self.assertRaises(RuntimeError):
+                self.service.action(self.a, "sharePhone", {"connectionId": tid, "share": True})
+        after = self.service.load(self.a)["connections"][0]
+        self.assertFalse(after["phoneShared"])
+        self.assertEqual(after["messages"], [])
 
     def test_reports_blocks_and_ended_threads(self):
         tid = self.conversation()["id"]
