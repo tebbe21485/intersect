@@ -2,9 +2,9 @@ import {ProviderError} from './contracts.mjs';
 
 const base = (window.intersectApiBaseURL || '').replace(/\/$/, '');
 let csrfToken = '';
-export async function request(path, input, {redirect = true} = {}) {
+export async function request(path, input, {redirect = true, timeoutMs = 15000} = {}) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`${base}/api/${path}`, {
       method: input === undefined ? 'GET' : 'POST', credentials: 'include', cache: 'no-store',
@@ -30,4 +30,5 @@ export async function request(path, input, {redirect = true} = {}) {
 }
 
 export const session = () => request('session', undefined, {redirect: false});
-export const action = (method, input) => request('action', {method, input});
+// The first saved piece can include loading the existing local matching model.
+export const action = (method, input) => request('action', {method, input}, {timeoutMs: method === 'savePuzzlePiece' ? 60000 : 15000});

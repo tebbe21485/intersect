@@ -1,5 +1,6 @@
 import reflex as rx
 
+from ..components.puzzle import puzzle_widget
 from ..components.ui import attrs, card, icon, link, overlays
 
 
@@ -36,6 +37,7 @@ def messages():
                 "Your identity stays yours until you both agree.",
                 class_name="conversation-sidebar-note",
             ),
+            link("Sample accounts", href="/login?demo=1", class_name="text-link"),
             class_name="sidebar conversations-sidebar",
             custom_attrs={"aria-label": "Conversations"},
         ),
@@ -46,6 +48,12 @@ def messages():
                         rx.el.div(id="chat-content"),
                         class_name="chat-card",
                         id="chat-card",
+                    ),
+                    rx.el.aside(
+                        puzzle_widget(mode="chat"),
+                        id="shared-puzzle-host",
+                        class_name="puzzle-chat-host",
+                        custom_attrs={"aria-label": "Connection tools"},
                     ),
                     class_name="messaging-layout",
                 ),

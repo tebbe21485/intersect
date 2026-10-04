@@ -1,0 +1,20 @@
+.matching-inputs {display:block;}
+.matching-card[hidden] {display:none;}
+.matching-tabs {margin-bottom:20px;}
+.matching-card {padding:24px; margin-bottom:24px; display:grid; gap:20px; min-width:0;}
+.matching-card h2 {font-size:24px;}
+.matching-piece {border-bottom:1px solid var(--color-border); padding:14px 0; display:grid; gap:10px;}
+.matching-piece p,.match-result p {overflow-wrap:anywhere;}
+.matching-piece-actions {display:flex; gap:12px; flex-wrap:wrap;}
+#personal-fields {display:grid; gap:18px;}
+.matching-choices {border:1px solid var(--color-border); border-radius:10px; padding:12px;}
+.matching-choices legend {padding:0 6px; font-weight:600;}
+.matching-choices label {display:inline-flex; flex-direction:row; gap:8px; align-items:center; padding:6px 10px 6px 0; font-size:14px; font-weight:400;}
+.matching-choices input {width:auto;}
+.matching-results {display:grid; gap:16px;}
+.match-result {padding:20px; border:1px solid var(--color-border); border-radius:12px; display:grid; gap:14px;}
+.match-result h3 {font-size:20px;}
+.match-result dl {display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 16px; margin-top:12px; font-size:14px;}
+.match-result summary {cursor:pointer;}
+.matching-card [hidden] {display:none;}
+@media(max-width:850px) {.matching-inputs {grid-template-columns:1fr;}}

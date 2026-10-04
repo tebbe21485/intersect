@@ -15,6 +15,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
+    sub.add_parser(
+        "prepare-matching", help="Download the MiniLM model into the project cache."
+    )
+    sub.add_parser(
+        "backfill-embeddings",
+        help="Embed existing free responses once; resumable and explicit.",
+    )
     admin = sub.add_parser("admin")
     admin.add_argument("--email", required=True)
     admin.add_argument("--first-name", default="Event")
@@ -30,6 +37,16 @@ def main():
     try:
         if args.command == "init":
             print(json.dumps(init_db(), indent=2))
+            return
+        if args.command == "prepare-matching":
+            from .matching.embeddings import prepare_model
+
+            print(json.dumps(prepare_model(), indent=2))
+            return
+        if args.command == "backfill-embeddings":
+            from .matching.service import MatchingService
+
+            print(json.dumps(MatchingService(Database()).backfill(), indent=2))
             return
         database = Database()
         auth = PasswordAuth(database)

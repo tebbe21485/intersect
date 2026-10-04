@@ -4,11 +4,14 @@ from . import repository as r
 from . import validation as v
 from .auth import profile
 from .errors import AppError
+from .matching.service import MatchingService
+from .matching.storage import save_embedding
 
 
 class ApplicationService:
-    def __init__(self, database):
+    def __init__(self, database, embedding_generator=None):
         self.database = database
+        self.matching = MatchingService(database, embedding_generator)
 
     def load(self, uid, after_messages=None):
         if after_messages is not None:
@@ -50,10 +53,32 @@ class ApplicationService:
             "saveProfile",
             "proposeGroup",
             "editGroupProposal",
+            "savePuzzlePiece",
+            "deletePuzzlePiece",
+            "savePersonalAnswers",
+            "findMatches",
         }
         if not isinstance(method, str) or method not in allowed:
             raise AppError("That action is unavailable.", 404)
         uid = v.identifier(uid)
+        if method == "savePuzzlePiece":
+            return self.matching.save_piece(uid, p)
+        if method == "deletePuzzlePiece":
+            return self.matching.delete_piece(uid, p)
+        if method == "savePersonalAnswers":
+            return self.matching.save_personal(uid, p)
+        if method == "findMatches":
+            return self.matching.candidates(
+                uid,
+                mode=p.get("mode", "similar"),
+                trait=p.get("trait"),
+                limit=p.get("limit", 20),
+            )
+        prepared_answer = (
+            self.matching.prepare_daily_answer(uid, p)
+            if method == "saveDailyAnswer"
+            else None
+        )
         with self.database.transaction(write=True) as c:
             r.actor(c, uid)
             if method == "saveProfile":
@@ -70,11 +95,16 @@ class ApplicationService:
             if method == "saveDailyAnswer":
                 qid = v.identifier(p.get("questionId"))
                 self.active(c, "dailyquestionbase", "thread_id", qid)
-                value = v.text(p.get("text"), "Answer", 500)
+                value, vector = prepared_answer
                 c.execute(
                     "INSERT INTO dailyresponsebase(thread_id,sender_id,content) VALUES(?,?,?) ON CONFLICT(thread_id,sender_id) DO UPDATE SET content=excluded.content,created_at=CURRENT_TIMESTAMP",
                     (qid, uid, value),
                 )
+                response_id = c.execute(
+                    "SELECT response_id FROM dailyresponsebase WHERE thread_id=? AND sender_id=?",
+                    (qid, uid),
+                ).fetchone()[0]
+                save_embedding(c, "daily", response_id, uid, value, vector)
                 return r.daily(c, uid, qid)
             if method == "voteOnPoll":
                 pid = v.identifier(p.get("pollId"))
@@ -234,11 +264,12 @@ class ApplicationService:
             (tid, uid, value, request),
         )
 
-    @staticmethod
-    def connect(c, uid, p):
+    def connect(self, c, uid, p):
         kind = p.get("kind")
+        if kind in ("match", "similar-answer", "poll"):
+            return self.matching.connect(c, uid, p)
         if kind not in ("daily-answer", "question-response"):
-            raise AppError("Automatic matching is planned for a future release.", 409)
+            raise AppError("Choose an available connection source.", 400)
         qid = v.identifier(p.get("questionId"))
         response = v.identifier(p.get("responseId"))
         if kind == "daily-answer":
@@ -260,8 +291,6 @@ class ApplicationService:
                 (qid, response),
             )
             source = "Question board"
-        else:
-            raise AppError("Automatic matching is planned for a future release.", 409)
         peer = row["sender_id"]
         if peer == uid:
             raise AppError("Choose someone else's response.")

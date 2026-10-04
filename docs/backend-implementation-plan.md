@@ -297,27 +297,28 @@ provider never silently falls back to the demo provider.
 
 ## Implementation verification
 
-- 21 backend tests and 11 browser-provider tests pass, together with Reflex compilation and Ruff checks.
+- 44 backend tests and 11 browser-provider tests pass, together with Reflex compilation and Ruff checks. Matching tests include pure scoring, stored vectors, modes, privacy and schema upgrades.
 - Production: one frontend/backend port, shared temporary QA database, isolated Chrome browser contexts at 1440x1000 and 390x844. Verified bidirectional messages, saved history after restart, draft/focus preservation, mutual consent, separate phone sharing, group proposal/approval, privacy, account/profile flows, board conversations, filtering, reports/blocking, admin publishing and logout.
 - Browser plugin unavailable; regular Playwright used. Page identity/content, absence of framework error overlays, production console health, screenshot evidence and interactions were checked. Development additionally verified the separate-port API configuration and Python reloads; Reflex/react-helmet emits its existing Strict Mode lifecycle warning in development.
 - Snapshots bound activity/board/group lists and histories to 100 records for this initial local demo; direct conversations support earlier-message pages and incremental refresh. General feed/group-history pagination remains a later extension if event volume requires it.
 - Default database initialized without sample users or credentials. Admin bootstrap and opt-in demo setup remain explicit CLI commands; no matching scores or simulated messages/consent were seeded.
 
-## Future task MATCH-01 — Weighted matching (do not implement now)
+## MATCH-01 — Initial weighted matching implemented
 
-- [ ] Agree on input sources, measurement methods, normalization, missing-data
-  handling, formula, weights, thresholds and tie-breaking rules.
-- [ ] Define whether comfort level affects eligibility or score; document how
-  interests, moral responses, daily answers and poll choices are measured.
-- [ ] Define a versioned scoring interface separate from repositories and UI.
-- [ ] Implement measurement adapters and configurable weights only after the
-  formula is approved. Do not assume a simple weighted sum is the final formula.
-- [ ] Specify recalculation triggers, caching, explanation output and score storage.
-- [ ] Test fixed examples supplied with the formula, edge cases and ordering.
-- [ ] Enable automatic match controls after integration and validation.
+- [x] Implement the subsequently approved 40/20/20/20 formula with 70/30
+  question/poll subweights, shared-record comparisons and missing-data normalization.
+- [x] Keep pure scoring, cached MiniLM encoding, SQLite inputs and authorized
+  connection creation modular; persist explanation/configuration snapshots.
+- [x] Implement Similar, Different with a shared anchor, and hard trait filtering.
+- [x] Add puzzle/personal input forms and enable existing activity match controls.
+- [x] Cover the requested profile cases, filtering, privacy, persistence and migration.
+- [ ] Validate/tune thresholds with event data; add future stance analysis if needed.
+- [ ] Define how additional comfort/moral inputs should be measured before using them.
 
-Until then, direct user-selected connections remain available; no compatibility
-scores, automatic rankings or matching simulations are added to the real backend.
+See [connection matching v1](connection-matching.md) for the implementation,
+schema upgrade and setup. Scores describe similarity and topic overlap; names,
+contact details and legacy unmeasured inputs are excluded. Both public and private
+polls contribute to matching; private poll results remain hidden from users.
 
 ## Future task AUTH-02 — Conference registration login
 

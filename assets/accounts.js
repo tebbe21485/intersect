@@ -1,5 +1,6 @@
 (async () => {
   const {request, session, action} = await import('/services/http.mjs');
+  const {leaveDemo, getDemoAccount} = await import('/services/puzzle-store.mjs');
   const form = document.getElementById('account-form');
   const status = document.getElementById('account-status');
   if (!form || form.dataset.ready) return;
@@ -11,8 +12,19 @@
     status.hidden = !message;
     status.dataset.error = String(error);
   };
-  const controls = [...form.elements];
-  const disable = value => controls.forEach(control => { control.disabled = value; });
+  const controls = () => [...form.elements];
+  const disabledStates = new Map();
+  const disable = value => {
+    if (value) controls().forEach(control => {
+      if (!disabledStates.has(control)) disabledStates.set(control, control.disabled);
+      control.disabled = true;
+    });
+    else {
+      disabledStates.forEach((disabled, control) => { if (control.isConnected) control.disabled = disabled; });
+      disabledStates.clear();
+      form.querySelector('button[type="submit"]').disabled = false;
+    }
+  };
   const clearField = field => {
     field.removeAttribute('aria-invalid');
     field.removeAttribute('aria-describedby');
@@ -48,6 +60,9 @@
   async function initialize() {
     disable(true);
     try {
+      if (mode === 'login' && (getDemoAccount() || new URLSearchParams(location.search).has('demo'))) {
+        ready = true; form.dataset.initialized = 'true'; show(''); return;
+      }
       const current = await session();
       if (mode === 'profile') {
         if (!current.profile) { location.assign('/login'); return; }
@@ -60,7 +75,7 @@
   form.addEventListener('submit', async event => {
     event.preventDefault();
     if (!ready) { await initialize(); return; }
-    controls.forEach(clearField);
+    controls().forEach(clearField);
     if (mode === 'login' && !validateLogin()) return;
     const input = Object.fromEntries(new FormData(form));
     disable(true); show('Saving…');
@@ -68,8 +83,9 @@
       if (mode === 'profile') { await action('saveProfile', input); show('Profile saved. Phone sharing choices have been reset.'); }
       else {
         await request(mode, input, {redirect:false});
+        leaveDemo();
         sessionStorage.removeItem('intersect-ui-v1');
-        location.assign('/');
+        location.assign(mode === 'register' ? '/matching' : '/');
       }
     } catch (error) {
       const message = error.userMessage || 'Unable to save. Please try again.';

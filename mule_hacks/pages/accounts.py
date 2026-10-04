@@ -2,6 +2,7 @@
 
 import reflex as rx
 
+from ..components.puzzle import puzzle_widget
 from ..components.ui import api_config, attrs, brand, button, card, link
 
 
@@ -105,6 +106,10 @@ def account_page(mode):
                 class_name="form-feedback",
                 hidden=True,
                 custom_attrs={"aria-live": "polite", "aria-atomic": "true"},
+            ),
+            *(
+                [puzzle_widget(mode="accounts")]
+                if mode == "login" else []
             ),
             class_name="account-card",
         ),

@@ -52,6 +52,15 @@
     catch (error) { status.textContent = error.userMessage; }
     finally { pending = false; controls.forEach(el => { el.disabled = false; }); }
   });
-  try { await session(); data = await request('admin'); render(); status.textContent = ''; }
-  catch (error) { status.textContent = error.userMessage || 'Unable to load administrator tools.'; }
+  try {
+    const current = await session();
+    if (!current.profile) { location.replace('/login'); return; }
+    if (current.profile.role !== 'admin') { location.replace('/'); return; }
+    data = await request('admin');
+    render();
+    status.textContent = '';
+  } catch (error) {
+    if (error.status === 403) { location.replace('/'); return; }
+    status.textContent = error.userMessage || 'Unable to load administrator tools.';
+  }
 })();

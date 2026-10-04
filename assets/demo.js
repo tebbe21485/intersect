@@ -16,6 +16,7 @@
   }
   const {createProvider} = await import('/services/provider.mjs');
   const {loadUiState, saveUiState} = await import('/services/ui-state.mjs');
+  const {getConnectionState, observeMessages} = await import('/services/connection-state.mjs');
   const ui = loadUiState();
   const requestedQuestion = new URLSearchParams(location.search).get("question");
   if (requestedQuestion) ui.dailyId = requestedQuestion;
@@ -205,6 +206,17 @@
     updateCounts();
   }
   const starters = ['What got you into that?', 'What’s been the best part of your week?'];
+  const floorContext = c => ({
+    key: c.puzzleKey || `local:${data.profile.id}:${c.id}`,
+    ids: [data.profile.id, c.peerId || `peer:${c.id}`],
+  });
+  const identityAvailable = c => {
+    const context = floorContext(c);
+    return getConnectionState(context.key, context.ids).identityAvailable;
+  };
+  window.addEventListener('intersect:connection-change', () => {
+    if (data && !pending && active()) renderChat(true);
+  });
   function renderChat(preserveDraft = false) {
     if (!$('#chat-content')) return;
     const draft = preserveDraft ? ($('[data-form="message"] input')?.value || '') : '';
@@ -216,6 +228,12 @@
     const scrollTop = oldMessages?.scrollTop || 0;
     const atBottom = !oldMessages || oldMessages.scrollHeight - oldMessages.scrollTop - oldMessages.clientHeight < 60;
     const c = active();
+    if (c) {
+      const context = floorContext(c);
+      observeMessages(context.key, context.ids, c.messages.map(message => ({...message, ownerId: message.from === 'me' ? data.profile.id : context.ids[1]})));
+    }
+    window.intersectPuzzleChat = c ? {profile: data.profile, connection: c} : null;
+    window.dispatchEvent(new CustomEvent('intersect:chat-selected', {detail: window.intersectPuzzleChat}));
     $('.app-shell').classList.toggle('has-active-chat', !!c);
     $('.messaging-layout').classList.toggle('chat-selected', !!c);
     renderConversationList();
@@ -223,17 +241,16 @@
       $('#chat-content').innerHTML = '<div class="empty"><h3>Pick a conversation</h3><p>A thoughtful hello can go a long way.</p><a href="/daily" class="btn primary">Explore responses</a></div>';
       return;
     }
-    const visibleStarters = starters.filter(prompt => !(ui.dismissed[c.id] || []).includes(prompt));
     $('#chat-content').innerHTML = `<header class="chat-header">
       <button type="button" class="icon-button mobile-back" data-action="back-messages" aria-label="Back to messages">${icon('arrow-left', 20)}</button>
       ${avatar(c.alias, c.color, true)}<div><h3>${escape(name(c))}</h3><span class="muted text-xs">${c.reveal === 'revealed' ? 'Identity mutually revealed' : 'Anonymous connection'}</span></div><span class="chat-status"><span></span>Here to connect</span>
       </header><div class="chat-context">${icon('lock', 14)}${c.reveal === 'revealed' ? 'You both agreed to share your identities.' : `Connected through ${escape(c.source.toLowerCase())} · ${escape(c.shared)}`}</div>
       <div class="chat-messages" role="log" aria-label="Conversation messages" aria-live="polite">${c.hasOlderMessages ? button('Load earlier messages', 'older-messages', '', 'secondary') : ''}<p class="chat-date">This is the beginning of something good</p>${c.messages.map(m => `<div class="message ${m.from === 'me' ? 'me' : 'them'}"><p>${escape(m.text)}</p><span>${m.from === 'me' ? 'You' : escape(name(c))} · ${escape(displayTime(m.time))}</span></div>`).join('')}</div>
-      <div class="chat-bottom">${visibleStarters.length ? `<section class="suggested-starters" aria-label="Suggested conversation starters"><div class="starter-heading"><span>Try a little curiosity</span><button type="button" class="icon-button" data-action="dismiss-all" aria-label="Dismiss suggested prompts">${icon('x', 18)}</button></div><div class="starter-row">${visibleStarters.map(prompt => `<span class="starter-chip"><button type="button" data-action="starter" data-prompt="${escape(prompt)}">${escape(prompt)}</button><button type="button" class="starter-dismiss" data-action="dismiss-starter" data-prompt="${escape(prompt)}" aria-label="Dismiss prompt: ${escape(prompt)}">${icon('x')}</button></span>`).join('')}</div></section>` : '<button type="button" class="suggestion-toggle" data-action="show-starters">Show conversation starters</button>'}
+      <div class="chat-bottom">
       <form class="message-form" data-form="message"><input name="message" aria-label="Message" placeholder="Write a thoughtful hello…" maxlength="1000" autocomplete="off" required/><button class="btn primary" type="submit" aria-label="Send message" disabled>${icon('send', 18)}</button></form>
-      <div class="chat-controls"><button type="button" class="chat-action unlock-action" data-action="unlock">${icon('lock', 14)}${c.reveal === 'revealed' ? 'Identity revealed' : c.reveal === 'waiting' ? 'Waiting for other person' : 'Request identity unlock'}</button>
+      <div class="chat-controls">
       <button type="button" class="chat-action" data-action="end">${icon('logout', 14)}End conversation</button><button type="button" class="chat-action" data-action="report">${icon('flag', 14)}Report / block</button></div></div>`;
-    if (provider.capabilities.backend) $('.chat-controls').insertAdjacentHTML('beforeend', `<button type="button" class="chat-action" data-action="share-phone">${c.phoneShared ? 'Stop sharing my phone' : 'Share my phone number'}</button>${c.phone ? `<p class="phone-note">${escape(name(c))} shared their phone: ${escape(c.phone)}</p>` : ''}`);
+    if (provider.capabilities.backend && identityAvailable(c)) $('.chat-controls').insertAdjacentHTML('beforeend', `<button type="button" class="chat-action" data-action="share-phone">${c.phoneShared ? 'Stop sharing my phone' : 'Share my phone number'}</button>${c.phone ? `<p class="phone-note">${escape(name(c))} shared their phone: ${escape(c.phone)}</p>` : ''}`);
     const messages = $('.chat-messages');
     $('[data-form="message"] input').value = draft;
     $('[data-form="message"] button').disabled = !draft.trim();
@@ -268,6 +285,7 @@
   }
   function showUnlock() {
     const c = active();
+    if (!identityAvailable(c)) { notify('Identity sharing is available after both people complete Floor 2.'); return; }
     showModal(c.reveal === 'revealed' ? 'A connection, with a name.' : 'Your identity. Your choice.',
       `<div class="unlock-symbol">${icon('lock', 30)}</div><p class="unlock-explanation">Both people must choose to reveal their identity.</p><p class="muted text-sm text-center">Your name stays hidden until you both agree. You can keep talking anonymously for as long as you like.</p>
       <div class="consent-row"><span>${avatar(data.profile.alias, 'blue', true)}You</span><span>${c.reveal ? '✓ Agreed to reveal' : 'Identity hidden'}</span></div><div class="consent-row"><span>${avatar(c.alias, c.color, true)}${escape(c.alias)}</span><span>${c.peerConsent || c.reveal === 'revealed' ? '✓ Agreed to reveal' : 'Identity hidden'}</span></div>
@@ -312,10 +330,10 @@
       case 'dismiss-all': ui.dismissed[ui.activeId] = [...starters]; persist(); renderChat(true); break;
       case 'show-starters': ui.dismissed[ui.activeId] = []; persist(); renderChat(true); break;
       case 'unlock': showUnlock(); break;
-      case 'share-phone': showModal('Share your phone number?', `<p class="muted my-4">${active().phoneShared ? 'Stop sharing your phone number in this conversation.' : `Share your phone number only with ${escape(name(active()))}. They can save it once you share it.`}</p>${button(active().phoneShared ? 'Stop sharing' : 'Share my number', 'confirm-phone')}`); break;
-      case 'confirm-phone': runOperation(async () => { const c = await provider.sharePhone({connectionId:ui.activeId,share:!active().phoneShared}); data.connections = replaceRecord(data.connections,c); closeModal(); renderChat(true); }); break;
+      case 'share-phone': if (!identityAvailable(active())) { notify('Contact sharing is available after Floor 2.'); break; } showModal('Share your phone number?', `<p class="muted my-4">${active().phoneShared ? 'Stop sharing your phone number in this conversation.' : `Share your phone number only with ${escape(name(active()))}. They can save it once you share it.`}</p>${button(active().phoneShared ? 'Stop sharing' : 'Share my number', 'confirm-phone')}`); break;
+      case 'confirm-phone': if (!identityAvailable(active())) return; runOperation(async () => { const c = await provider.sharePhone({connectionId:ui.activeId,share:!active().phoneShared}); data.connections = replaceRecord(data.connections,c); closeModal(); renderChat(true); }); break;
       case 'older-messages': runOperation(async () => { const c = active(); const older = await provider.loadOlderMessages({connectionId:c.id,before:c.messages[0].id}); c.messages = [...older,...c.messages]; c.hasOlderMessages = older.length === 100; renderChat(true); }); break;
-      case 'request-unlock': runOperation(async () => { const connection = await provider.requestIdentityReveal({connectionId: ui.activeId}); data.connections = replaceRecord(data.connections, connection); renderChat(true); showUnlock(); }); break;
+      case 'request-unlock': if (!identityAvailable(active())) return; runOperation(async () => { const connection = await provider.requestIdentityReveal({connectionId: ui.activeId}); data.connections = replaceRecord(data.connections, connection); renderChat(true); showUnlock(); }); break;
       case 'consent': if (provider.capabilities.simulateIdentityConsent) runOperation(async () => { const connection = await provider.simulateIdentityConsent({connectionId: ui.activeId}); data.connections = replaceRecord(data.connections, connection); renderChat(true); showUnlock(); }); break;
       case 'cancel-unlock': runOperation(async () => { const connection = await provider.cancelIdentityReveal({connectionId: ui.activeId}); data.connections = replaceRecord(data.connections, connection); renderChat(true); showUnlock(); }); break;
       case 'end': showModal('End this conversation?', `<p class="muted my-5">This will remove your conversation with ${escape(active().alias)}. You can always discover another connection.</p><div class="flex gap-3">${button('Keep talking', 'close-modal', '', 'secondary')}${button('End conversation', 'confirm-end')}</div>`); break;

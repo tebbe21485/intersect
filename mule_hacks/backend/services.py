@@ -139,10 +139,10 @@ class FrontendService(Protocol):
 class SQLiteFrontendService:
     """Async integration facade; every transaction stays in its worker thread."""
 
-    def __init__(self, database):
+    def __init__(self, database, embedding_generator=None):
         from .application import ApplicationService
 
-        self.application = ApplicationService(database)
+        self.application = ApplicationService(database, embedding_generator)
 
     async def load(self, context: RequestContext, *, after_messages=None) -> AppData:
         from starlette.concurrency import run_in_threadpool

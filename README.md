@@ -1,7 +1,7 @@
 # Intersect - Reflex + SQLite
 
 A modular Reflex 0.9.12 app with a Python backend and a shared local SQLite database.
-Accounts, questions, polls, groups, the Question Board and private conversations now use the database. Weighted matching and conference registration login remain future tasks.
+Accounts, questions, polls, groups, the Question Board, private conversations and connection matching use the database. Conference registration login remains a future task.
 
 ## Set up and run
 
@@ -10,6 +10,8 @@ Run from this project directory with Python 3.11 or newer:
 ```powershell
 uv sync --cache-dir .cache/uv
 .venv/Scripts/python.exe -m mule_hacks.backend.cli init
+.venv/Scripts/python.exe -m mule_hacks.backend.cli prepare-matching
+.venv/Scripts/python.exe -m mule_hacks.backend.cli backfill-embeddings
 $adminEmail = Read-Host "Email address for your admin account"
 .venv/Scripts/python.exe -m mule_hacks.backend.cli admin --email "$adminEmail"
 .venv/Scripts/reflex.exe run --env prod --single-port --backend-port 3000
@@ -46,6 +48,14 @@ $adminEmail = Read-Host "Email address for your existing admin account"
 
 This asks for passwords for accounts that do not exist. It retains existing records and seeds activities only when that activity collection is empty. It creates no messages, consent decisions or calculated matches.
 
+## Shared puzzle demo
+
+Open `/login?demo=1` and choose Juniper, Maple, River or Sage to try the browser-local shared puzzle in the existing connection chat. Each account has three sample connections and 4–8 personal pieces. In the **Puzzle** tab, select a piece, click **Share piece**, then click its colored SVG piece to read the description and author. Use **Sample accounts** in the messages sidebar to switch sides of a connection. Creating an account opens **Build your puzzle**, where you save 4–8 pieces with separate titles and descriptions. Titles appear in the clickable preview; descriptions open on click.
+
+The **Conversation** tab shows four floors and up to three optional suggestions. Both people must send two messages on each floor and separately approve advancing. Identity sharing unlocks after both complete Floor 2 and needs mutual consent in the **Identity** tab. Floor progress, demo messages and choices stay local to the current browser tab.
+
+The React components compile through Reflex and use the existing CSS utilities. The authenticated builder saves pieces in the existing matching database and mirrors them into the local preview. Shared-puzzle reveal choices stay in the current browser tab. See [shared puzzle demo](docs/shared-puzzle-demo.md) for the files and local-state limits.
+
 ## Structure
 
 - `mule_hacks/pages/` and `components/`: modular Reflex pages and shared UI; account and admin pages are included.
@@ -59,11 +69,13 @@ This asks for passwords for accounts that do not exist. It retains existing reco
 
 See [backend integration](docs/backend-integration.md) for the API, schema and privacy rules, and [implementation plan](docs/backend-implementation-plan.md) for completion checks and deferred work.
 
+Open **Connections → Build your puzzle** (`/matching`) to add puzzle pieces, answer optional predefined fields and choose Similar, Different or a specific saved trait. The editor has **Puzzle**, **Personal answers** and **Connections** tabs. See [connection matching](docs/connection-matching.md) for weights, thresholds, API inputs and the topic-versus-agreement limitation. Stop the running app before a database upgrade, then run `init` and `backfill-embeddings` with the same database path before restarting.
+
 ## Verify
 
 ```powershell
 .venv/Scripts/python.exe -m unittest discover -s tests/backend -v
-node --test tests/frontend/provider.test.mjs
+node --test tests/frontend/provider.test.mjs tests/frontend/puzzle.test.mjs tests/frontend/connection-floors.test.mjs
 .venv/Scripts/reflex.exe compile --dry
 ```
 

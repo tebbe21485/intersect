@@ -16,7 +16,8 @@
  * @typedef {{id:string, category:string, text:string, detail:string, alias:string, time:string, responses:Response[]}} Question
  * @typedef {{id:string, name:string, icon:string, color:string, size:number, description:string, activity:string, question:string, joined:boolean, approval:'pending'|'approved'|'rejected', status:'open'|'closed'|'archived', decisionReason:string, isMine:boolean, messages:Array<Message & {alias:string}>}} Group
  * @typedef {{profile:Profile, dailyQuestions:DailyQuestion[], polls:Poll[], completed:boolean, connections:Connection[], groups:Group[], groupProposals:Group[], questions:Question[], categories:string[]}} AppData
- * @typedef {{kind:'daily-answer', questionId:string, responseId:string}|{kind:'similar-answer', questionId:string}|{kind:'poll', pollId:string}|{kind:'question-response', questionId:string, responseId:string}} ConnectionContext
+ * @typedef {{category:'puzzle'|'daily_questions'|'polls'|'groups'|'personal', value:string|number, field?:string}} MatchingTrait
+ * @typedef {{kind:'daily-answer', questionId:string, responseId:string}|{kind:'similar-answer', questionId:string}|{kind:'poll', pollId:string}|{kind:'question-response', questionId:string, responseId:string}|{kind:'match', mode?:'similar'|'different'|'trait', userId?:string|number, trait?:MatchingTrait}} ConnectionContext
  * @typedef {{connection:Connection, completed:boolean}} ConnectionResult
  * @typedef {Object} DataProvider
  * @property {{simulateIdentityConsent:boolean}} capabilities

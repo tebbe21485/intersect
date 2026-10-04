@@ -2,16 +2,17 @@
 
 import reflex as rx
 
+from .backend.api import create_api
+from .pages.accounts import login, profile, register
+from .pages.admin import admin
 from .pages.connect import connect
 from .pages.daily import daily
 from .pages.groups import groups
 from .pages.home import home
+from .pages.matching import matching
 from .pages.messages import messages
 from .pages.questions import questions
 from .pages.welcome import welcome
-from .pages.accounts import login, register, profile
-from .pages.admin import admin
-from .backend.api import create_api
 
 app = rx.App(
     enable_state=False,
@@ -25,12 +26,15 @@ app = rx.App(
         "/css/messaging.css",
         "/css/reflex.css",
         "/css/backend.css",
+        "/css/matching.css",
+        "/css/puzzle.css",
     ],
 )
 for route, page in [
     ("/", home),
     ("/daily", daily),
     ("/connect", connect),
+    ("/matching", matching),
     ("/groups", groups),
     ("/questions", questions),
     ("/messages", messages),
