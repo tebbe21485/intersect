@@ -2,6 +2,7 @@
 
 import reflex as rx
 
+from ..components.puzzle import puzzle_widget
 from ..components.ui import api_config, attrs, brand, button, card, link
 
 
@@ -42,7 +43,6 @@ def account_page(mode):
                 else "Sign in to continue the conversation.",
                 class_name="muted",
             ),
-            rx.el.p(id="account-status", role="status", class_name="form-feedback"),
             rx.el.form(
                 *(
                     [
@@ -82,8 +82,12 @@ def account_page(mode):
             ),
             *(
                 [
-                    link("Back to Intersect", href="/", class_name="text-link"),
                     button("Sign out", variant="secondary", id="logout-button"),
+                    link(
+                        "Back to Intersect",
+                        href="/",
+                        class_name="btn primary profile-back",
+                    ),
                 ]
                 if editing
                 else [
@@ -95,6 +99,17 @@ def account_page(mode):
                         class_name="text-link",
                     )
                 ]
+            ),
+            rx.el.p(
+                id="account-status",
+                role="status",
+                class_name="form-feedback",
+                hidden=True,
+                custom_attrs={"aria-live": "polite", "aria-atomic": "true"},
+            ),
+            *(
+                [puzzle_widget(mode="accounts")]
+                if mode == "login" else []
             ),
             class_name="account-card",
         ),

@@ -13,11 +13,13 @@ Modular Reflex pages + browser rendering
 
 ## Database and migrations
 
+Schema version 2 adds connection matching storage. See [connection matching](connection-matching.md) for the upgrade, model preparation, cached-vector lifecycle and matching API. Candidate scoring includes both public and private polls, excludes identity/contact fields, and keeps private poll statistics hidden.
+
 `SQLiteSettings.from_environment()` reads `INTERSECT_DB_PATH` at use time; relative paths resolve from the project root. Default: `data/intersect.sqlite3`. Initialization is explicit: `python -m mule_hacks.backend.cli init`. Importing the app never creates or migrates a database. Each SQL operation runs in its own worker thread and connection with foreign keys enabled; writes use `BEGIN IMMEDIATE`, commit before responding, and roll back on failure.
 
 `schema_migrations` records the schema version. Fresh initialization creates required tables and indexes. Existing prototype tables are backed up using SQLite's backup API, renamed to `legacy_*`, and imported into the new schema. Valid IDs, profile inputs, messages and activity records remain; duplicate or unusable legacy rows are retained in the archive rather than discarded. Unknown schemas/versions cause an explicit refusal. Legacy accounts without email need an explicit account-linking migration before login; they are not automatically assigned invented addresses. Backups and databases remain private and ignored by Git.
 
-Tables retain the merged project's names: `userbase`, `dailyquestionbase`, `dailyresponsebase`, `pollbase`, `pollchoicebase`, `pollresponsebase`, `directthreadbase`, `directmessagebase`, `threadbase`, `threadmemberbase`, `threadmessagebase`. Groups/threads use the thread tables. The separate app-wide Question Board uses `boardpostbase` / `boardreplybase`. Sessions, consent, blocks, reports and admin audits have separate tables. Existing interest/moral/comfort/score records are preserved; no new matching measurements or scores are collected.
+Tables retain the merged project's names: `userbase`, `dailyquestionbase`, `dailyresponsebase`, `pollbase`, `pollchoicebase`, `pollresponsebase`, `directthreadbase`, `directmessagebase`, `threadbase`, `threadmemberbase`, `threadmessagebase`. Groups/threads use the thread tables. The separate app-wide Question Board uses `boardpostbase` / `boardreplybase`. Sessions, consent, blocks, reports and admin audits have separate tables. Existing interest/moral/comfort/score records are preserved. Matching adds `puzzlepiecebase`, `personalanswerbase`, `embeddingbase` and `matchdecisionbase`; unmeasured legacy inputs remain excluded.
 
 ## Authentication and HTTP API
 
@@ -43,7 +45,7 @@ Use production single-port mode (`reflex run --env prod --single-port`) for the 
 
 Frontend operations are `saveDailyAnswer`, `voteOnPoll`, `createConnection`, `sendMessage`, `joinGroup`, `sendGroupMessage`, `postQuestion`, `replyToQuestion`, `requestIdentityReveal`, `cancelIdentityReveal`, `sharePhone`, `endConversation`, `reportConnection`, `blockConnection`, `saveProfile`, `proposeGroup` and `editGroupProposal`. Backend methods validate lengths, content, referenced ownership and lifecycle state. Message writes also require `requestId`; the same sender/thread/request returns the committed message rather than creating a duplicate. A different request ID can intentionally send identical text.
 
-Direct connection contexts are `{kind:'daily-answer', questionId, responseId}` or `{kind:'question-response', questionId, responseId}`. The backend resolves the peer from that scoped response, rejects self-connections and blocks, and reuses an open conversation for the pair. Automatic similar-answer and poll matching are unavailable until MATCH-01; production has no simulated peer replies/consent.
+Direct connection contexts are `{kind:'daily-answer', questionId, responseId}` or `{kind:'question-response', questionId, responseId}`. The backend resolves the peer from that scoped response, rejects self-connections and blocks, and reuses an open conversation for the pair. Automatic contexts also support `similar-answer`, `poll` and `match` with Similar/Different/trait modes. Automatic creation rechecks eligibility and stores an explanation; production has no simulated peer replies/consent.
 
 Admin operations are `saveQuestion`, `savePoll`, `saveGroup`, `reviewGroup`, `reviewReport`. Activities support draft/published/closed/archived; only published activities accept answer/vote updates. Poll choice changes are rejected after votes exist. Group approval is separate from open/closed/archived lifecycle. User edits force another review; pending/rejected groups are visible only to their proposer/admin. Only approved, open groups accept membership/messages.
 
@@ -59,6 +61,6 @@ Admin operations are `saveQuestion`, `savePoll`, `saveGroup`, `reviewGroup`, `re
 
 ## Deferred work
 
-MATCH-01: specify input measurements, normalization, weights and scoring formula before implementing matching or collecting additional profile inputs.
+MATCH-01 v1 is implemented; [connection matching](connection-matching.md) documents the approved formula, stored inputs, modes and remaining threshold/stance tuning.
 
 AUTH-02: select the conference registration system/protocol and implement an adapter/account linking. Email verification, password-reset delivery and deployment-specific session/login policies remain deployment work.

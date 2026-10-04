@@ -14,6 +14,7 @@ from .pages.connect import connect
 from .pages.daily import daily
 from .pages.groups import groups
 from .pages.home import home
+from .pages.matching import matching
 from .pages.messages import messages
 from .pages.questions import questions
 from .pages.welcome import welcome
@@ -30,6 +31,8 @@ app = rx.App(
         "/css/messaging.css",
         "/css/reflex.css",
         "/css/backend.css",
+        "/css/matching.css",
+        "/css/puzzle.css",
     ],
 )
 
@@ -46,6 +49,7 @@ for route, page in [
     ("/", home),
     ("/daily", daily),
     ("/connect", connect),
+    ("/matching", matching),
     ("/groups", groups),
     ("/questions", questions),
     ("/messages", messages),

@@ -7,7 +7,7 @@ assets/external/
 .venv/
 reflex.log
 *.log
-data/
+/data/
 *.sqlite
 *.sqlite3
 *.sqlite-*

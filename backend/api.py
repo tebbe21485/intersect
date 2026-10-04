@@ -1,5 +1,6 @@
 """Same-origin HTTP API hosted by Reflex through its public api_transformer hook."""
 
+import json
 import logging
 import os
 import secrets
@@ -23,10 +24,10 @@ CSRF_COOKIE = "intersect_csrf"
 log = logging.getLogger(__name__)
 
 
-def create_api(database=None, authentication=None):
+def create_api(database=None, authentication=None, embedding_generator=None):
     database = database or Database()
-    service = ApplicationService(database)
-    frontend = SQLiteFrontendService(database)
+    service = ApplicationService(database, embedding_generator)
+    frontend = SQLiteFrontendService(database, embedding_generator)
     # Defer expensive adapter construction until the first account operation.
     adapter = authentication
     sessions = Sessions(database)
@@ -122,6 +123,24 @@ def create_api(database=None, authentication=None):
                     )
                 elif path == "admin":
                     value = await run_in_threadpool(service.admin_load, uid)
+                elif path == "matching/profile":
+                    value = await run_in_threadpool(service.matching.profile, uid)
+                elif path == "matches":
+                    try:
+                        raw_trait = request.query_params.get("trait")
+                        if raw_trait and len(raw_trait) > 1024:
+                            raise ValueError
+                        trait = json.loads(raw_trait) if raw_trait else None
+                        limit = int(request.query_params.get("limit", "20"))
+                    except (ValueError, TypeError):
+                        raise AppError("Choose valid matching options.") from None
+                    value = await run_in_threadpool(
+                        service.matching.candidates,
+                        uid,
+                        mode=request.query_params.get("mode", "similar"),
+                        trait=trait,
+                        limit=limit,
+                    )
                 else:
                     p = await payload(request)
                     if path == "logout":
@@ -177,6 +196,8 @@ def create_api(database=None, authentication=None):
             ("messages", ["GET"]),
             ("action", ["POST"]),
             ("admin", ["GET"]),
+            ("matching/profile", ["GET"]),
+            ("matches", ["GET"]),
             ("admin/action", ["POST"]),
         )
     ]

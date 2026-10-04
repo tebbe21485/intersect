@@ -1,6 +1,6 @@
 import reflex as rx
 
-from ..components.activities import challenge_card, daily_card, poll_card
+from ..components.activities import daily_card, poll_card
 from ..components.layout import shell
 from ..components.ui import attrs, icon, link, page_title
 
@@ -29,7 +29,6 @@ def home():
                 for key, label in [
                     ("daily", "Daily question"),
                     ("poll", "Mini poll"),
-                    ("challenge", "Challenge"),
                 ]
             ],
             class_name="activity-tabs",
@@ -48,7 +47,6 @@ def home():
             for key, component in [
                 ("daily", daily_card()),
                 ("poll", poll_card()),
-                ("challenge", challenge_card()),
             ]
         ],
         rx.el.section(

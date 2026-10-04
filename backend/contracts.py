@@ -4,7 +4,7 @@ Keys retain the browser's spelling. API inputs are validated by validation.py;
 application.py authorizes and returns these viewer-specific projections.
 """
 
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 Color = Literal["blue", "yellow", "green"]
 
@@ -164,14 +164,45 @@ class QuestionConnectionContext(TypedDict):
     responseId: str
 
 
+class MatchingTrait(TypedDict):
+    category: Literal["puzzle", "daily_questions", "polls", "groups", "personal"]
+    value: str | int
+    field: NotRequired[str]
+
+
+class MatchConnectionContext(TypedDict):
+    kind: Literal["match"]
+    mode: NotRequired[Literal["similar", "different", "trait"]]
+    userId: NotRequired[str | int]
+    trait: NotRequired[MatchingTrait]
+
+
+class MatchingCandidate(TypedDict):
+    user_id: int
+    alias: str
+    overall_similarity: float
+    category_scores: dict[str, float | None]
+    effective_weights: dict[str, float]
+    effective_subweights: dict[str, float]
+    connection_mode: Literal["similar", "different", "trait"]
+    shared_anchors: list[str]
+    match_reason: str
+    puzzle_details: dict
+    comparable_counts: dict[str, int]
+    algorithm: str
+    trait_similarity: NotRequired[float]
+
+
 ConnectionContext = (
     DailyConnectionContext
     | SimilarConnectionContext
     | PollConnectionContext
     | QuestionConnectionContext
+    | MatchConnectionContext
 )
 
 
 class ConnectionResult(TypedDict):
     connection: Connection
     completed: bool
+    match: NotRequired[MatchingCandidate]

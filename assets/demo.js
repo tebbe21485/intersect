@@ -16,7 +16,10 @@
   }
   const {createProvider} = await import('/services/provider.mjs');
   const {loadUiState, saveUiState} = await import('/services/ui-state.mjs');
+  const {getConnectionState, observeMessages} = await import('/services/connection-state.mjs');
   const ui = loadUiState();
+  const requestedQuestion = new URLSearchParams(location.search).get("question");
+  if (requestedQuestion) ui.dailyId = requestedQuestion;
   let data = null, provider = null, pending = false;
   let revision = 0, refreshing = false;
   const answerDrafts = new Map();
@@ -93,86 +96,91 @@
     if (previousFocus?.isConnected) previousFocus.focus();
   }
   function setActivity(key, focus = false) {
-    ui.activity = key;
+    ui.activity = ['daily', 'poll'].includes(key) ? key : 'daily';
     $$('[data-action="activity"]').forEach(tab => {
-      const selected = tab.dataset.activity === key;
+      const selected = tab.dataset.activity === ui.activity;
       tab.setAttribute('aria-selected', selected);
       tab.tabIndex = selected ? 0 : -1;
       const panel = $(`#panel-${tab.dataset.activity}`);
       if (panel) panel.hidden = !selected;
     });
-    if (focus) $(`#activity-${key}`)?.focus();
+    if (focus) $(`#activity-${ui.activity}`)?.focus();
     persist();
   }
+  // Keep the Reflex card design while giving every activity independent controls.
+  const dailyTemplate = $('#daily-cards > .card')?.cloneNode(true);
+  const pollTemplate = $('#poll-cards > .card')?.cloneNode(true);
+  function activityCard(template, id, kind) {
+    const card = template.cloneNode(true);
+    card.dataset[kind + 'Id'] = id;
+    card.querySelectorAll('[id]').forEach(el => {
+      el.dataset.field = el.id;
+      el.removeAttribute('id');
+    });
+    return card;
+  }
+  const field = (card, name) => card.querySelector(`[data-field="${name}"]`);
   function renderAnswer() {
-    $$('[data-action="similar-answer"]').forEach(el => { el.hidden = provider.capabilities.automaticMatching === false; });
-    if (!data.daily) {
-      if ($('#daily-question-title')) $('#daily-question-title').textContent = 'No active questions yet.';
-      if ($('#daily-form')) $('#daily-form').hidden = true;
-      if ($('#daily-selector')) $('#daily-selector').parentElement.hidden = true;
-      if ($('#daily-responses')) $('#daily-responses').innerHTML = '<p class="muted">An admin will publish questions here.</p>';
-      if ($('#your-answer-card')) $('#your-answer-card').hidden = true;
-      return;
+    const host = $('#daily-cards');
+    if (host && dailyTemplate) {
+      const focused = document.activeElement;
+      const focusedId = focused?.closest('[data-question-id]')?.dataset.questionId;
+      const selection = focused?.matches('textarea') ? [focused.selectionStart, focused.selectionEnd] : null;
+      host.replaceChildren(...data.dailyQuestions.map(question => {
+        const card = activityCard(dailyTemplate, question.id, 'question');
+        field(card, 'daily-question-title').textContent = question.text;
+        const form = field(card, 'daily-form');
+        form.dataset.questionId = question.id;
+        const input = field(card, 'daily-response');
+        input.id = `daily-response-${question.id}`;
+        form.querySelector('label').htmlFor = input.id;
+        input.value = answerDrafts.get(question.id) ?? question.answer;
+        input.disabled = question.status === 'closed';
+        form.querySelector('button[type="submit"]').disabled = question.status === 'closed';
+        field(card, 'daily-submit-label').textContent = question.status === 'closed' ? 'Question closed' : question.answer ? 'Update answer' : 'Share anonymously';
+        field(card, 'daily-explore').dataset.questionId = question.id;
+        return card;
+      }));
+      if (!data.dailyQuestions.length) host.innerHTML = '<section class="card daily-card"><h2>No active questions yet.</h2><p class="muted">An admin will publish questions here.</p></section>';
+      if (selection) {
+        const next = [...host.querySelectorAll('textarea')].find(el => el.closest('[data-question-id]').dataset.questionId === focusedId);
+        if (next) { next.focus({preventScroll:true}); next.setSelectionRange(...selection); }
+      }
     }
-    if ($('#daily-form')) $('#daily-form').hidden = false;
-    if ($('#daily-selector')) {
-      $('#daily-selector').parentElement.hidden = data.dailyQuestions.length < 2;
-      $('#daily-selector').innerHTML = data.dailyQuestions.map(q => `<option value="${escape(q.id)}" ${q.id === data.daily.id ? 'selected' : ''}>${escape(q.text)}${q.status === 'closed' ? ' (closed)' : ''}</option>`).join('');
+    if ($('#your-answer')) $('#your-answer').textContent = data.daily?.answer || '';
+    if ($('#your-answer-card')) $('#your-answer-card').hidden = !data.daily?.answer;
+    if ($('#daily-responses')) {
+      $('#daily-detail-question').textContent = data.daily?.text || (requestedQuestion ? 'This question is no longer available.' : 'No active questions yet.');
+      $('#daily-perspectives').hidden = !data.daily;
+      $('#daily-perspectives-title').textContent = 'A few different perspectives';
+      $('#daily-responses').innerHTML = data.daily?.responses.map(response => `<section class="card answer-card">
+        ${avatar(response.alias, response.color)}<div><strong>${escape(response.alias)}</strong><p>${escape(response.text)}</p><span class="tag">${escape(response.interest)}</span></div>
+        ${button(`Connect ${icon('arrow-right')}`, 'connect', `data-response-id="${escape(response.id)}"`, 'secondary')}</section>`).join('') || (data.daily?.answer
+          ? '<p class="muted">Your response is shared. Check back soon for other perspectives.</p>'
+          : '<p class="muted">No other responses yet. Share your perspective to get things started.</p>');
     }
-    if ($('#daily-question-title')) $('#daily-question-title').textContent = data.daily.text;
-    if ($('#daily-response')) {
-      $('#daily-response').value = answerDrafts.get(data.daily.id) ?? data.daily.answer;
-      $('#daily-response').disabled = data.daily.status === 'closed';
-      $('#daily-form button').disabled = data.daily.status === 'closed';
-    }
-    if ($('#daily-submit-label')) $('#daily-submit-label').textContent = data.daily.answer ? 'Update answer' : 'Share anonymously';
-    if ($('#submitted-answer')) {
-      $('#submitted-answer').textContent = `“${data.daily.answer}”`;
-      $('#submitted-answer').hidden = !data.daily.answer;
-    }
-    if ($('#your-answer')) $('#your-answer').textContent = data.daily.answer;
-    if ($('#your-answer-card')) $('#your-answer-card').hidden = !data.daily.answer;
-    if ($('#daily-responses')) $('#daily-responses').innerHTML = data.daily.responses.map(response => `<section class="card answer-card">
-      ${avatar(response.alias, response.color)}<div><strong>${escape(response.alias)}</strong><p>${escape(response.text)}</p><span class="tag">${escape(response.interest)}</span></div>
-      ${button(`Connect ${icon('arrow-right')}`, 'connect', `data-response-id="${escape(response.id)}"` , 'secondary')}</section>`).join('') || '<p class="muted">No other responses yet. Share your perspective to get things started.</p>';
     $$('[data-action="similar-answer"]').forEach(el => { el.hidden = provider.capabilities.automaticMatching === false; });
   }
   function renderPoll() {
-    if (!data.poll) {
-      if ($('#poll-title')) $('#poll-title').textContent = 'No active polls yet.';
-      if ($('#poll-options')) $('#poll-options').innerHTML = '';
-      if ($('#poll-note')) $('#poll-note').textContent = 'An admin will publish polls here.';
-      if ($('#poll-selector')) $('#poll-selector').parentElement.hidden = true;
-      if ($('#poll-match')) $('#poll-match').hidden = true;
-      return;
-    }
-    if ($('#poll-selector')) {
-      $('#poll-selector').parentElement.hidden = data.polls.length < 2;
-      $('#poll-selector').innerHTML = data.polls.map(p => `<option value="${escape(p.id)}" ${p.id === data.poll.id ? 'selected' : ''}>${escape(p.question)}${p.status === 'closed' ? ' (closed)' : ''}</option>`).join('');
-    }
-    if ($('#poll-title')) $('#poll-title').textContent = data.poll.question;
-    if ($('#poll-options')) $('#poll-options').innerHTML = data.poll.choices.map(choice => `<button type="button" class="poll-option" data-action="vote" data-choice="${escape(choice.id)}" data-percent="${choice.percent}" aria-pressed="false"><span class="poll-fill"></span><span class="relative flex items-center gap-3"><span class="radio"></span>${icon(choice.icon, 17)}${escape(choice.text)}</span><strong class="relative text-xs" hidden>${choice.percent}%</strong></button>`).join('');
-    $$('[data-action="vote"]').forEach(option => {
-      const selected = option.dataset.choice === data.poll.vote;
-      option.classList.toggle('selected', selected);
-      option.classList.toggle('voted', data.poll.vote !== null);
-      option.setAttribute('aria-pressed', selected);
-      option.querySelector('.poll-fill').style.width = data.poll.vote === null || data.poll.resultsPublic === false ? '0%' : `${option.dataset.percent}%`;
-      option.querySelector('strong').hidden = data.poll.vote === null || data.poll.resultsPublic === false;
-      option.querySelector('.radio').innerHTML = selected ? icon('check', 11) : '';
-      option.disabled = data.poll.status === 'closed';
-    });
-    if ($('#poll-note')) $('#poll-note').textContent = data.poll.resultsPublic === false ? (data.poll.vote ? 'Your vote is saved. Results are private.' : 'Results are private. Your choice stays anonymous.') : (data.poll.vote === null ? 'One choice. A little common ground.' : `${data.poll.totalVotes} votes`);
-    if ($('#poll-match')) $('#poll-match').hidden = data.poll.vote === null || provider.capabilities.automaticMatching === false;
+    const host = $('#poll-cards');
+    if (!host || !pollTemplate) return;
+    host.replaceChildren(...data.polls.map(poll => {
+      const card = activityCard(pollTemplate, poll.id, 'poll');
+      field(card, 'poll-title').textContent = poll.question;
+      field(card, 'poll-options').innerHTML = poll.choices.map(choice => {
+        const selected = choice.id === poll.vote;
+        const showResults = poll.vote !== null && poll.resultsPublic !== false;
+        return `<button type="button" class="poll-option ${selected ? 'selected' : ''} ${poll.vote !== null ? 'voted' : ''}" data-action="vote" data-poll-id="${escape(poll.id)}" data-choice="${escape(choice.id)}" aria-pressed="${selected}" ${poll.status === 'closed' ? 'disabled' : ''}><span class="poll-fill" style="width:${showResults ? choice.percent : 0}%"></span><span class="relative flex items-center gap-3"><span class="radio">${selected ? icon('check',11) : ''}</span>${icon(choice.icon,17)}${escape(choice.text)}</span><strong class="relative text-xs" ${showResults ? '' : 'hidden'}>${choice.percent}%</strong></button>`;
+      }).join('');
+      field(card, 'poll-note').textContent = poll.status === 'closed' ? 'This poll is closed.' : poll.resultsPublic === false ? (poll.vote ? 'Your vote is saved. Results are private.' : 'Results are private. Your choice stays anonymous.') : (poll.vote === null ? 'One choice. A little common ground.' : `${poll.totalVotes} votes`);
+      const match = field(card, 'poll-match');
+      match.dataset.pollId = poll.id;
+      match.hidden = poll.vote === null || provider.capabilities.automaticMatching === false;
+      return card;
+    }));
+    if (!data.polls.length) host.innerHTML = '<section class="card poll-card"><h3>No active polls yet.</h3><p class="muted">An admin will publish polls here.</p></section>';
   }
   function updateCounts() { $$('[data-connection-count]').forEach(el => { el.textContent = data.connections.length; }); }
-  function renderChallenge() {
-    if (!$('#challenge-title')) return;
-    $('#challenge-title').textContent = data.completed ? 'Curiosity, rewarded.' : 'Let curiosity lead.';
-    $('#challenge-description').textContent = data.completed ? 'You started a conversation with a new perspective. That’s how connection begins.' : 'Start a conversation with someone whose answer surprised you.';
-    $('#challenge-progress').style.width = data.completed ? '100%' : '0%';
-    $('#challenge-count').textContent = `${Number(data.completed)} of 1`;
-  }
   function renderConnections() {
     const grid = $('#connections-grid');
     if (!grid) return;
@@ -187,7 +195,6 @@
   async function connect(context) {
     const result = await provider.createConnection(context);
     const connection = result.connection;
-    data.completed = result.completed;
     ui.notice = `You’re connected with ${connection.alias}. Say a thoughtful hello.`;
     openChat(connection.id);
   }
@@ -199,6 +206,17 @@
     updateCounts();
   }
   const starters = ['What got you into that?', 'What’s been the best part of your week?'];
+  const floorContext = c => ({
+    key: c.puzzleKey || `local:${data.profile.id}:${c.id}`,
+    ids: [data.profile.id, c.peerId || `peer:${c.id}`],
+  });
+  const identityAvailable = c => {
+    const context = floorContext(c);
+    return getConnectionState(context.key, context.ids).identityAvailable;
+  };
+  window.addEventListener('intersect:connection-change', () => {
+    if (data && !pending && active()) renderChat(true);
+  });
   function renderChat(preserveDraft = false) {
     if (!$('#chat-content')) return;
     const draft = preserveDraft ? ($('[data-form="message"] input')?.value || '') : '';
@@ -210,6 +228,12 @@
     const scrollTop = oldMessages?.scrollTop || 0;
     const atBottom = !oldMessages || oldMessages.scrollHeight - oldMessages.scrollTop - oldMessages.clientHeight < 60;
     const c = active();
+    if (c) {
+      const context = floorContext(c);
+      observeMessages(context.key, context.ids, c.messages.map(message => ({...message, ownerId: message.from === 'me' ? data.profile.id : context.ids[1]})));
+    }
+    window.intersectPuzzleChat = c ? {profile: data.profile, connection: c} : null;
+    window.dispatchEvent(new CustomEvent('intersect:chat-selected', {detail: window.intersectPuzzleChat}));
     $('.app-shell').classList.toggle('has-active-chat', !!c);
     $('.messaging-layout').classList.toggle('chat-selected', !!c);
     renderConversationList();
@@ -217,17 +241,16 @@
       $('#chat-content').innerHTML = '<div class="empty"><h3>Pick a conversation</h3><p>A thoughtful hello can go a long way.</p><a href="/daily" class="btn primary">Explore responses</a></div>';
       return;
     }
-    const visibleStarters = starters.filter(prompt => !(ui.dismissed[c.id] || []).includes(prompt));
     $('#chat-content').innerHTML = `<header class="chat-header">
       <button type="button" class="icon-button mobile-back" data-action="back-messages" aria-label="Back to messages">${icon('arrow-left', 20)}</button>
       ${avatar(c.alias, c.color, true)}<div><h3>${escape(name(c))}</h3><span class="muted text-xs">${c.reveal === 'revealed' ? 'Identity mutually revealed' : 'Anonymous connection'}</span></div><span class="chat-status"><span></span>Here to connect</span>
       </header><div class="chat-context">${icon('lock', 14)}${c.reveal === 'revealed' ? 'You both agreed to share your identities.' : `Connected through ${escape(c.source.toLowerCase())} · ${escape(c.shared)}`}</div>
       <div class="chat-messages" role="log" aria-label="Conversation messages" aria-live="polite">${c.hasOlderMessages ? button('Load earlier messages', 'older-messages', '', 'secondary') : ''}<p class="chat-date">This is the beginning of something good</p>${c.messages.map(m => `<div class="message ${m.from === 'me' ? 'me' : 'them'}"><p>${escape(m.text)}</p><span>${m.from === 'me' ? 'You' : escape(name(c))} · ${escape(displayTime(m.time))}</span></div>`).join('')}</div>
-      <div class="chat-bottom">${visibleStarters.length ? `<section class="suggested-starters" aria-label="Suggested conversation starters"><div class="starter-heading"><span>Try a little curiosity</span><button type="button" class="icon-button" data-action="dismiss-all" aria-label="Dismiss suggested prompts">${icon('x', 18)}</button></div><div class="starter-row">${visibleStarters.map(prompt => `<span class="starter-chip"><button type="button" data-action="starter" data-prompt="${escape(prompt)}">${escape(prompt)}</button><button type="button" class="starter-dismiss" data-action="dismiss-starter" data-prompt="${escape(prompt)}" aria-label="Dismiss prompt: ${escape(prompt)}">${icon('x')}</button></span>`).join('')}</div></section>` : '<button type="button" class="suggestion-toggle" data-action="show-starters">Show conversation starters</button>'}
+      <div class="chat-bottom">
       <form class="message-form" data-form="message"><input name="message" aria-label="Message" placeholder="Write a thoughtful hello…" maxlength="1000" autocomplete="off" required/><button class="btn primary" type="submit" aria-label="Send message" disabled>${icon('send', 18)}</button></form>
-      <div class="chat-controls"><button type="button" class="chat-action unlock-action" data-action="unlock">${icon('lock', 14)}${c.reveal === 'revealed' ? 'Identity revealed' : c.reveal === 'waiting' ? 'Waiting for other person' : 'Request identity unlock'}</button>
+      <div class="chat-controls">
       <button type="button" class="chat-action" data-action="end">${icon('logout', 14)}End conversation</button><button type="button" class="chat-action" data-action="report">${icon('flag', 14)}Report / block</button></div></div>`;
-    if (provider.capabilities.backend) $('.chat-controls').insertAdjacentHTML('beforeend', `<button type="button" class="chat-action" data-action="share-phone">${c.phoneShared ? 'Stop sharing my phone' : 'Share my phone number'}</button>${c.phone ? `<p class="phone-note">${escape(name(c))} shared their phone: ${escape(c.phone)}</p>` : ''}`);
+    if (provider.capabilities.backend && identityAvailable(c)) $('.chat-controls').insertAdjacentHTML('beforeend', `<button type="button" class="chat-action" data-action="share-phone">${c.phoneShared ? 'Stop sharing my phone' : 'Share my phone number'}</button>${c.phone ? `<p class="phone-note">${escape(name(c))} shared their phone: ${escape(c.phone)}</p>` : ''}`);
     const messages = $('.chat-messages');
     $('[data-form="message"] input').value = draft;
     $('[data-form="message"] button').disabled = !draft.trim();
@@ -262,6 +285,7 @@
   }
   function showUnlock() {
     const c = active();
+    if (!identityAvailable(c)) { notify('Identity sharing is available after both people complete Floor 2.'); return; }
     showModal(c.reveal === 'revealed' ? 'A connection, with a name.' : 'Your identity. Your choice.',
       `<div class="unlock-symbol">${icon('lock', 30)}</div><p class="unlock-explanation">Both people must choose to reveal their identity.</p><p class="muted text-sm text-center">Your name stays hidden until you both agree. You can keep talking anonymously for as long as you like.</p>
       <div class="consent-row"><span>${avatar(data.profile.alias, 'blue', true)}You</span><span>${c.reveal ? '✓ Agreed to reveal' : 'Identity hidden'}</span></div><div class="consent-row"><span>${avatar(c.alias, c.color, true)}${escape(c.alias)}</span><span>${c.peerConsent || c.reveal === 'revealed' ? '✓ Agreed to reveal' : 'Identity hidden'}</span></div>
@@ -284,8 +308,9 @@
     if (!data || pending) return;
     switch (d.action) {
       case 'activity': setActivity(d.activity); break;
-      case 'vote': runOperation(async () => { data.poll = await provider.voteOnPoll({pollId: data.poll.id, choiceId: d.choice}); data.polls = replaceRecord(data.polls, data.poll); renderPoll(); }); break;
-      case 'poll-match': if (data.poll.vote !== null) runOperation(() => connect({kind: 'poll', pollId: data.poll.id})); break;
+      case 'vote': runOperation(async () => { const poll = await provider.voteOnPoll({pollId: d.pollId, choiceId: d.choice}); data.polls = replaceRecord(data.polls, poll); selectActivities(); renderPoll(); }); break;
+      case 'poll-match': if (data.polls.find(p => p.id === d.pollId)?.vote != null) runOperation(() => connect({kind: 'poll', pollId: d.pollId})); break;
+      case 'explore-responses': ui.dailyId = d.questionId; persist(); location.assign(`/daily?question=${encodeURIComponent(d.questionId)}`); break;
       case 'similar-answer': runOperation(() => connect({kind: 'similar-answer', questionId: data.daily.id})); break;
       case 'connect': runOperation(() => connect(d.questionId ? {kind: 'question-response', questionId: d.questionId, responseId: d.responseId} : {kind: 'daily-answer', questionId: data.daily.id, responseId: d.responseId})); break;
       case 'open-chat': openChat(d.id); break;
@@ -305,10 +330,10 @@
       case 'dismiss-all': ui.dismissed[ui.activeId] = [...starters]; persist(); renderChat(true); break;
       case 'show-starters': ui.dismissed[ui.activeId] = []; persist(); renderChat(true); break;
       case 'unlock': showUnlock(); break;
-      case 'share-phone': showModal('Share your phone number?', `<p class="muted my-4">${active().phoneShared ? 'Stop sharing your phone number in this conversation.' : `Share your phone number only with ${escape(name(active()))}. They can save it once you share it.`}</p>${button(active().phoneShared ? 'Stop sharing' : 'Share my number', 'confirm-phone')}`); break;
-      case 'confirm-phone': runOperation(async () => { const c = await provider.sharePhone({connectionId:ui.activeId,share:!active().phoneShared}); data.connections = replaceRecord(data.connections,c); closeModal(); renderChat(true); }); break;
+      case 'share-phone': if (!identityAvailable(active())) { notify('Contact sharing is available after Floor 2.'); break; } showModal('Share your phone number?', `<p class="muted my-4">${active().phoneShared ? 'Stop sharing your phone number in this conversation.' : `Share your phone number only with ${escape(name(active()))}. They can save it once you share it.`}</p>${button(active().phoneShared ? 'Stop sharing' : 'Share my number', 'confirm-phone')}`); break;
+      case 'confirm-phone': if (!identityAvailable(active())) return; runOperation(async () => { const c = await provider.sharePhone({connectionId:ui.activeId,share:!active().phoneShared}); data.connections = replaceRecord(data.connections,c); closeModal(); renderChat(true); }); break;
       case 'older-messages': runOperation(async () => { const c = active(); const older = await provider.loadOlderMessages({connectionId:c.id,before:c.messages[0].id}); c.messages = [...older,...c.messages]; c.hasOlderMessages = older.length === 100; renderChat(true); }); break;
-      case 'request-unlock': runOperation(async () => { const connection = await provider.requestIdentityReveal({connectionId: ui.activeId}); data.connections = replaceRecord(data.connections, connection); renderChat(true); showUnlock(); }); break;
+      case 'request-unlock': if (!identityAvailable(active())) return; runOperation(async () => { const connection = await provider.requestIdentityReveal({connectionId: ui.activeId}); data.connections = replaceRecord(data.connections, connection); renderChat(true); showUnlock(); }); break;
       case 'consent': if (provider.capabilities.simulateIdentityConsent) runOperation(async () => { const connection = await provider.simulateIdentityConsent({connectionId: ui.activeId}); data.connections = replaceRecord(data.connections, connection); renderChat(true); showUnlock(); }); break;
       case 'cancel-unlock': runOperation(async () => { const connection = await provider.cancelIdentityReveal({connectionId: ui.activeId}); data.connections = replaceRecord(data.connections, connection); renderChat(true); showUnlock(); }); break;
       case 'end': showModal('End this conversation?', `<p class="muted my-5">This will remove your conversation with ${escape(active().alias)}. You can always discover another connection.</p><div class="flex gap-3">${button('Keep talking', 'close-modal', '', 'secondary')}${button('End conversation', 'confirm-end')}</div>`); break;
@@ -328,7 +353,7 @@
     switch (form.dataset.form) {
       case 'daily':
         if (!value('answer')) return;
-        runOperation(async () => { data.daily = await provider.saveDailyAnswer({questionId: data.daily.id, text: value('answer')}); data.dailyQuestions = replaceRecord(data.dailyQuestions,data.daily); answerDrafts.delete(data.daily.id); renderAnswer(); notify('Your answer has been shared anonymously.'); }); break;
+        runOperation(async () => { const question = await provider.saveDailyAnswer({questionId: form.dataset.questionId, text: value('answer')}); data.dailyQuestions = replaceRecord(data.dailyQuestions,question); answerDrafts.delete(question.id); selectActivities(); renderAnswer(); notify('Your answer has been shared anonymously.'); }); break;
       case 'message':
         if (!value('message') || !active()) return;
         form.dataset.requestId ||= newRequestId();
@@ -350,12 +375,10 @@
   document.addEventListener('input', event => {
     if (event.target.matches('[data-form="message"] input')) $('[data-form="message"] button').disabled = !event.target.value.trim();
     if (event.target.closest('[data-form="message"], [data-form="group"]')) delete event.target.closest('form').dataset.requestId;
-    if (event.target.id === 'daily-response' && data?.daily) answerDrafts.set(data.daily.id,event.target.value);
+    if (event.target.matches('[data-field="daily-response"]') && data) answerDrafts.set(event.target.closest('form').dataset.questionId,event.target.value);
   });
   document.addEventListener('change', event => {
     if (event.target.id === 'community') { ui.community = event.target.value; persist(); }
-    if (event.target.id === 'daily-selector') { ui.dailyId = event.target.value; selectActivities(); renderAnswer(); persist(); revision++; }
-    if (event.target.id === 'poll-selector') { ui.pollId = event.target.value; selectActivities(); renderPoll(); persist(); revision++; }
   });
   document.addEventListener('keydown', event => {
     if (!event.target.matches('[data-action="activity"]')) return;
@@ -392,11 +415,7 @@
       if (data.profile.role === 'admin' && $('.sidebar') && !$('.admin-link')) $('.sidebar').insertAdjacentHTML('beforeend','<a href="/admin" class="nav-item admin-link">Manage community</a>');
       if ($('#community')) $('#community').value = ui.community;
       if ($('#activity-daily')) setActivity(ui.activity);
-      if ($('#challenge-title')) {
-        $('#challenge-title').textContent = data.completed ? 'Curiosity, rewarded.' : 'Let curiosity lead.';
-        $('#challenge-description').textContent = data.completed ? 'You started a conversation with a new perspective. That’s how connection begins.' : 'Start a conversation with someone whose answer surprised you.';
-        $('#challenge-progress').style.width = data.completed ? '100%' : '0%'; $('#challenge-count').textContent = `${Number(data.completed)} of 1`;
-      }
+
       if (ui.notice) { const notice = ui.notice; ui.notice = ''; notify(notice); }
       persist();
       if ($('#data-status')) $('#data-status').hidden = true;
@@ -413,7 +432,9 @@
   function selectActivities() {
     data.dailyQuestions ||= data.daily ? [data.daily] : [];
     data.polls ||= data.poll ? [data.poll] : [];
-    data.daily = data.dailyQuestions.find(q => q.id === ui.dailyId) || data.dailyQuestions[0] || null;
+    data.daily = requestedQuestion && $('#daily-detail-question')
+      ? data.dailyQuestions.find(q => q.id === requestedQuestion) || null
+      : data.dailyQuestions.find(q => q.id === ui.dailyId) || data.dailyQuestions[0] || null;
     data.poll = data.polls.find(p => p.id === ui.pollId) || data.polls[0] || null;
     ui.dailyId = data.daily?.id; ui.pollId = data.poll?.id;
   }
@@ -457,12 +478,11 @@
         connection.incremental = false;
       }
       data = next; selectActivities();
-      if (JSON.stringify(previous.daily) !== JSON.stringify(data.daily)) renderAnswer();
-      if (JSON.stringify(previous.poll) !== JSON.stringify(data.poll)) renderPoll();
+      if (JSON.stringify(previous.dailyQuestions) !== JSON.stringify(data.dailyQuestions)) renderAnswer();
+      if (JSON.stringify(previous.polls) !== JSON.stringify(data.polls)) renderPoll();
       if (JSON.stringify(previous.connections) !== JSON.stringify(data.connections)) { renderConnections(); renderChat(true); updateCounts(); }
       if (JSON.stringify(previous.groups) !== JSON.stringify(data.groups) || JSON.stringify(previous.groupProposals) !== JSON.stringify(data.groupProposals)) renderGroups();
       if (JSON.stringify(previous.questions) !== JSON.stringify(data.questions)) renderQuestions();
-      if (previous.completed !== data.completed) renderChallenge();
       if ($('#demo-modal').open) {
         if ($('.unlock-explanation') && active()) {
           const old = previous.connections.find(c => c.id === ui.activeId);

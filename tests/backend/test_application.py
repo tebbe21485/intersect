@@ -12,6 +12,7 @@ from pathlib import Path
 from mule_hacks.backend.application import ApplicationService
 from mule_hacks.backend.auth import PasswordAuth, Sessions
 from mule_hacks.backend.errors import AppError
+from mule_hacks.backend.migrations import VERSION
 from mule_hacks.backend.sqlite import SQLiteSettings
 from mule_hacks.db_handler import Database, get_connections, get_username, init_db
 
@@ -57,7 +58,7 @@ class ApplicationTests(unittest.TestCase):
         shutil.copyfile(self.base, path)
         self.settings = SQLiteSettings(path)
         self.db = Database(self.settings)
-        self.service = ApplicationService(self.db)
+        self.service = ApplicationService(self.db, lambda text: (1.0,) + (0.0,) * 383)
         self.a, self.b, self.admin = [int(p["id"]) for p in self.people]
 
     def question(self, text="What made you smile?"):
@@ -496,7 +497,7 @@ class MigrationTests(unittest.TestCase):
             with self.assertRaises(AppError), database.transaction():
                 pass
             self.assertFalse(Path(settings.path).exists())
-            self.assertEqual(init_db(settings)["version"], 1)
+            self.assertEqual(init_db(settings)["version"], VERSION)
             self.assertIsNone(init_db(settings)["backup"])
             with (
                 self.assertRaises(sqlite3.IntegrityError),

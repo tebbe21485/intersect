@@ -9,7 +9,34 @@ from argon2 import PasswordHasher
 
 from .sqlite import SQLiteSettings, sqlite_connection
 
-VERSION = 1
+VERSION = 3
+PUZZLE_TITLE_SCHEMA = "ALTER TABLE puzzlepiecebase ADD COLUMN title TEXT NOT NULL DEFAULT '';"
+MATCHING_SCHEMA = """
+CREATE TABLE puzzlepiecebase (
+ piece_id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES userbase,
+ category TEXT NOT NULL, content TEXT NOT NULL,
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX puzzle_owner ON puzzlepiecebase(user_id,piece_id);
+CREATE TABLE personalanswerbase (
+ user_id INTEGER NOT NULL REFERENCES userbase, field TEXT NOT NULL, answer_json TEXT NOT NULL,
+ updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id,field)
+);
+CREATE TABLE embeddingbase (
+ source TEXT NOT NULL CHECK(source IN ('puzzle','daily')), source_id INTEGER NOT NULL,
+ user_id INTEGER NOT NULL REFERENCES userbase, model TEXT NOT NULL, content_hash TEXT NOT NULL,
+ dimensions INTEGER NOT NULL CHECK(dimensions>0), vector_json TEXT NOT NULL,
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(source,source_id,model)
+);
+CREATE INDEX embedding_owner ON embeddingbase(user_id,source);
+CREATE TABLE matchdecisionbase (
+ decision_id INTEGER PRIMARY KEY AUTOINCREMENT, thread_id INTEGER NOT NULL REFERENCES directthreadbase,
+ requester_id INTEGER NOT NULL REFERENCES userbase, candidate_id INTEGER NOT NULL REFERENCES userbase,
+ algorithm TEXT NOT NULL, mode TEXT NOT NULL CHECK(mode IN ('similar','different','trait')),
+ score REAL NOT NULL CHECK(score>=0 AND score<=1), explanation_json TEXT NOT NULL,
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, CHECK(requester_id!=candidate_id)
+);
+"""
 SCHEMA = """
 CREATE TABLE userbase (
  user_id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE COLLATE NOCASE,
@@ -271,11 +298,31 @@ def migrate(settings: SQLiteSettings | None = None):
             version = c.execute(
                 "SELECT MAX(version) FROM schema_migrations"
             ).fetchone()[0]
-            if version != VERSION:
+            if version not in (1, 2, VERSION):
                 raise RuntimeError(
                     f"Unsupported database version {version}; expected {VERSION}."
                 )
-            return {"version": version, "backup": None, "legacyTables": []}
+            if version == VERSION:
+                return {"version": version, "backup": None, "legacyTables": []}
+            backup_path = backup_database(c, settings)
+            c.execute("BEGIN IMMEDIATE")
+            # Another initializer may have migrated while this connection waited.
+            current = c.execute(
+                "SELECT MAX(version) FROM schema_migrations"
+            ).fetchone()[0]
+            if current == 1:
+                for statement in statements(MATCHING_SCHEMA):
+                    c.execute(statement)
+            if current in (1, 2):
+                c.execute(PUZZLE_TITLE_SCHEMA)
+                c.execute(
+                    "INSERT INTO schema_migrations(version) VALUES(?)", (VERSION,)
+                )
+            return {
+                "version": VERSION,
+                "backup": str(backup_path) if backup_path else None,
+                "legacyTables": [],
+            }
         legacy = names & {
             "userbase",
             "interestbase",
@@ -295,20 +342,30 @@ def migrate(settings: SQLiteSettings | None = None):
                 "Unrecognized existing database. Refusing to change it automatically."
             )
         backup_path = None
-        if legacy and str(settings.path) != ":memory:":
-            stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-            backup_path = Path(str(settings.path) + f".backup-{stamp}")
-            with closing(sqlite3.connect(str(backup_path))) as backup:
-                c.backup(backup)
+        if legacy:
+            backup_path = backup_database(c, settings)
         c.execute("BEGIN IMMEDIATE")
         for table in sorted(legacy):
             c.execute(f'ALTER TABLE "{table}" RENAME TO "legacy_{table}"')
         for statement in statements(SCHEMA):
             c.execute(statement)
         import_legacy(c, legacy)
+        for statement in statements(MATCHING_SCHEMA):
+            c.execute(statement)
+        c.execute(PUZZLE_TITLE_SCHEMA)
         c.execute("INSERT INTO schema_migrations(version) VALUES(?)", (VERSION,))
         return {
             "version": VERSION,
             "backup": str(backup_path) if backup_path else None,
             "legacyTables": sorted(legacy),
         }
+
+
+def backup_database(c, settings):
+    if str(settings.path) == ":memory:":
+        return None
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    path = Path(str(settings.path) + f".backup-{stamp}")
+    with closing(sqlite3.connect(str(path))) as backup:
+        c.backup(backup)
+    return path

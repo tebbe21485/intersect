@@ -6,4 +6,5 @@ dependencies = [
     "argon2-cffi>=25.1.0",
     "better-profanity>=0.7.0",
     "reflex==0.9.12",
+    "sentence-transformers>=5.1.0,<6",
 ]
