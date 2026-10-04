@@ -46,7 +46,6 @@ PERSONAL_FIELDS = {
     "event_interests": {
         "kind": "multi",
         "options": [
-            "robotics",
             "technology",
             "science",
             "business",
@@ -59,7 +58,6 @@ PERSONAL_FIELDS = {
     "hobbies": {
         "kind": "multi",
         "options": [
-            "robotics",
             "coding",
             "reading",
             "music",
