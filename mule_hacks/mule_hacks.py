@@ -108,49 +108,6 @@ class State(rx.State):
 
 
 
-def index() -> rx.Component:
-    return rx.container(
-        rx.vstack(
-            rx.heading("Thread", size="7"),
-            rx.box(
-                rx.vstack(
-                    rx.foreach(
-                        State.messages,
-                        lambda message: rx.box(
-                            rx.text(message["message"]),
-                            padding="0.75em",
-                            border_radius="8px",
-                            background="var(--gray-3)",
-                            width="100%",
-                        ),
-                    ),
-                    spacing="1"
-                ),
-                width="100%",
-                height="60vh",
-                overflow_y="auto",
-                padding="1em",
-                border="1px solid var(--gray-6)",
-                border_radius="8px",
-            ),
-            rx.hstack(
-                rx.input(
-                    value=State.draft,
-                    on_change=State.set_draft,
-                    on_key_down=State.check_enter,
-                    placeholder="Write a message...",
-                    width="100%",
-                ),
-                rx.button("Send", on_click=State.send_message),
-                width="100%",
-            ),
-            spacing="4",
-            justify="center",
-            min_height="85vh",
-            width="100%",
-        ),
-    )
-
 
 app = rx.App()
 app.add_page(index, on_load=State.load_thread)
