@@ -42,7 +42,6 @@ def account_page(mode):
                 else "Sign in to continue the conversation.",
                 class_name="muted",
             ),
-            rx.el.p(id="account-status", role="status", class_name="form-feedback"),
             rx.el.form(
                 *(
                     [
@@ -99,6 +98,13 @@ def account_page(mode):
                         class_name="text-link",
                     )
                 ]
+            ),
+            rx.el.p(
+                id="account-status",
+                role="status",
+                class_name="form-feedback",
+                hidden=True,
+                custom_attrs={"aria-live": "polite", "aria-atomic": "true"},
             ),
             class_name="account-card",
         ),

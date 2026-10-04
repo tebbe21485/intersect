@@ -5,7 +5,7 @@ function select(value) {
   const state = defaults();
   if (!value || typeof value !== 'object') return state;
   if (typeof value.activeId === 'string' || value.activeId === null) state.activeId = value.activeId;
-  if (['daily', 'poll', 'challenge'].includes(value.activity)) state.activity = value.activity;
+  if (['daily', 'poll'].includes(value.activity)) state.activity = value.activity;
   if (typeof value.community === 'string') state.community = value.community;
   if (typeof value.notice === 'string') state.notice = value.notice;
   for (const key of ['viewerId','dailyId','pollId']) if (typeof value[key] === 'string') state[key] = value[key];

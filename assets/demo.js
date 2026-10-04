@@ -95,7 +95,7 @@
     if (previousFocus?.isConnected) previousFocus.focus();
   }
   function setActivity(key, focus = false) {
-    ui.activity = ['daily', 'poll', 'challenge'].includes(key) ? key : 'daily';
+    ui.activity = ['daily', 'poll'].includes(key) ? key : 'daily';
     $$('[data-action="activity"]').forEach(tab => {
       const selected = tab.dataset.activity === ui.activity;
       tab.setAttribute('aria-selected', selected);
@@ -180,13 +180,6 @@
     if (!data.polls.length) host.innerHTML = '<section class="card poll-card"><h3>No active polls yet.</h3><p class="muted">An admin will publish polls here.</p></section>';
   }
   function updateCounts() { $$('[data-connection-count]').forEach(el => { el.textContent = data.connections.length; }); }
-  function renderChallenge() {
-    if (!$('#challenge-title')) return;
-    $('#challenge-title').textContent = data.completed ? 'Curiosity, rewarded.' : 'Let curiosity lead.';
-    $('#challenge-description').textContent = data.completed ? 'You started a conversation with a new perspective. That’s how connection begins.' : 'Start a conversation with someone whose answer surprised you.';
-    $('#challenge-progress').style.width = data.completed ? '100%' : '0%';
-    $('#challenge-count').textContent = `${Number(data.completed)} of 1`;
-  }
   function renderConnections() {
     const grid = $('#connections-grid');
     if (!grid) return;
@@ -201,7 +194,6 @@
   async function connect(context) {
     const result = await provider.createConnection(context);
     const connection = result.connection;
-    data.completed = result.completed;
     ui.notice = `You’re connected with ${connection.alias}. Say a thoughtful hello.`;
     openChat(connection.id);
   }
@@ -405,11 +397,7 @@
       if (data.profile.role === 'admin' && $('.sidebar') && !$('.admin-link')) $('.sidebar').insertAdjacentHTML('beforeend','<a href="/admin" class="nav-item admin-link">Manage community</a>');
       if ($('#community')) $('#community').value = ui.community;
       if ($('#activity-daily')) setActivity(ui.activity);
-      if ($('#challenge-title')) {
-        $('#challenge-title').textContent = data.completed ? 'Curiosity, rewarded.' : 'Let curiosity lead.';
-        $('#challenge-description').textContent = data.completed ? 'You started a conversation with a new perspective. That’s how connection begins.' : 'Start a conversation with someone whose answer surprised you.';
-        $('#challenge-progress').style.width = data.completed ? '100%' : '0%'; $('#challenge-count').textContent = `${Number(data.completed)} of 1`;
-      }
+
       if (ui.notice) { const notice = ui.notice; ui.notice = ''; notify(notice); }
       persist();
       if ($('#data-status')) $('#data-status').hidden = true;
@@ -477,7 +465,6 @@
       if (JSON.stringify(previous.connections) !== JSON.stringify(data.connections)) { renderConnections(); renderChat(true); updateCounts(); }
       if (JSON.stringify(previous.groups) !== JSON.stringify(data.groups) || JSON.stringify(previous.groupProposals) !== JSON.stringify(data.groupProposals)) renderGroups();
       if (JSON.stringify(previous.questions) !== JSON.stringify(data.questions)) renderQuestions();
-      if (previous.completed !== data.completed) renderChallenge();
       if ($('#demo-modal').open) {
         if ($('.unlock-explanation') && active()) {
           const old = previous.connections.find(c => c.id === ui.activeId);

@@ -6,8 +6,6 @@ from .ui import (
     card,
     conversation_art,
     icon,
-    link,
-    privacy_note,
 )
 
 
@@ -54,12 +52,6 @@ def daily_card(expanded=False):
                 class_name="daily-content relative z-10",
             ),
             conversation_art(),
-            rx.el.div(
-                privacy_note(),
-                rx.el.span("A new question. Every day."),
-                class_name="daily-footer",
-            ),
-            class_name=f"daily-card {'expanded' if expanded else ''}",
         ),
         id="daily-cards",
         class_name="activity-stack",
@@ -97,28 +89,4 @@ def poll_card():
         ),
         id="poll-cards",
         class_name="activity-stack",
-    )
-
-
-
-def challenge_card():
-    return card(
-        rx.el.span(icon("sparkles", 16), "Daily challenge", class_name="section-label"),
-        rx.el.h2("Let curiosity lead.", id="challenge-title"),
-        rx.el.p(
-            "Start a conversation with someone whose answer surprised you.",
-            id="challenge-description",
-        ),
-        rx.el.div(
-            rx.el.div(rx.el.span(id="challenge-progress"), class_name="progress-track"),
-            rx.el.span("0 of 1", id="challenge-count"),
-            class_name="progress-row",
-        ),
-        link(
-            "Explore responses",
-            icon("arrow-right", 16),
-            href="/daily",
-            class_name="btn white",
-        ),
-        class_name="challenge-card",
     )

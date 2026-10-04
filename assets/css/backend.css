@@ -3,6 +3,8 @@
 .account-card h1 {font-size:30px;}
 .profile-back {justify-self:center;}
 .form-feedback {color:var(--color-text); white-space:pre-wrap; min-height:20px;}
+.form-feedback[data-error="true"] {color:#a12622;}
+#account-form input[aria-invalid="true"] {border-color:#a12622; background:#fff4f3; outline:2px solid #a12622; outline-offset:1px;}
 .admin-section {padding:24px; margin-bottom:24px;}
 .admin-editor {border-top:1px solid var(--color-border); padding:24px 0; margin-top:16px;}
 .group-proposals:not(:empty) {margin-bottom:24px;}
