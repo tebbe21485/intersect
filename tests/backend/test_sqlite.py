@@ -5,7 +5,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from mule_hacks.backend.sqlite import PROJECT_ROOT, SQLiteSettings, sqlite_connection
+from mule_hacks.backend.sqlite import (
+    PROJECT_ROOT,
+    SQLiteSettings,
+    sqlite_connection,
+)
 
 
 class RecordingConnection(sqlite3.Connection):

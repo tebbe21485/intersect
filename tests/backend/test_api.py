@@ -1,14 +1,19 @@
 """HTTP boundaries: sessions, CSRF, role checks and independent browser cookies."""
 
+import asyncio
+import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
+from unittest.mock import patch
 
 from starlette.testclient import TestClient
 
 from mule_hacks.backend.api import COOKIE, create_api
 from mule_hacks.backend.sqlite import SQLiteSettings
 from mule_hacks.db_handler import Database, init_db
+from mule_hacks.mule_hacks import initialize_database
 
 
 class APITests(unittest.TestCase):
@@ -22,6 +27,29 @@ class APITests(unittest.TestCase):
 
     def session(self, client=None):
         return (client or self.client).get("/api/session").json()["csrfToken"]
+
+    def test_backend_startup_initializes_only_a_missing_database(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cloud.sqlite3"
+            with patch.dict("os.environ", {"INTERSECT_DB_PATH": str(path)}):
+                asyncio.run(initialize_database())
+                with closing(sqlite3.connect(path)) as connection, connection:
+                    self.assertEqual(
+                        connection.execute(
+                            "SELECT MAX(version) FROM schema_migrations"
+                        ).fetchone()[0],
+                        1,
+                    )
+                    connection.execute(
+                        "INSERT INTO userbase(email,password_hash,first_name,last_name,alias) "
+                        "VALUES('kept@example.test','hash','Kept','User','K')"
+                    )
+                asyncio.run(initialize_database())
+                with closing(sqlite3.connect(path)) as connection:
+                    self.assertEqual(
+                        connection.execute("SELECT COUNT(*) FROM userbase").fetchone()[0],
+                        1,
+                    )
 
     def post(self, path, value, client=None):
         client = client or self.client
@@ -78,6 +106,49 @@ class APITests(unittest.TestCase):
             ).status_code,
             200,
         )
+
+    def test_https_cloud_frontend_origin_supports_credentialed_api_requests(self):
+        frontend_origin = "https://frontend.example"
+        with patch.dict(
+            "os.environ", {"INTERSECT_ALLOWED_ORIGINS": frontend_origin}
+        ):
+            client = TestClient(
+                create_api(self.database), base_url="https://backend.example"
+            )
+        self.addCleanup(client.close)
+        preflight = client.options(
+            "/api/register",
+            headers={
+                "Origin": frontend_origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type,x-csrf-token",
+            },
+        )
+        self.assertEqual(preflight.status_code, 200)
+        self.assertEqual(
+            preflight.headers["access-control-allow-origin"], frontend_origin
+        )
+        self.assertEqual(preflight.headers["access-control-allow-credentials"], "true")
+
+        session = client.get("/api/session", headers={"Origin": frontend_origin})
+        self.assertEqual(session.headers["access-control-allow-origin"], frontend_origin)
+        self.assertIn("samesite=none", session.headers["set-cookie"].lower())
+        self.assertIn("secure", session.headers["set-cookie"].lower())
+        response = client.post(
+            "/api/register",
+            json={
+                "email": "cloud@example.test",
+                "password": "test-password-123",
+                "firstName": "Cloud",
+                "lastName": "User",
+            },
+            headers={
+                "Origin": frontend_origin,
+                "X-CSRF-Token": session.json()["csrfToken"],
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["access-control-allow-origin"], frontend_origin)
 
     def test_csrf_origin_json_and_request_validation(self):
         csrf = self.session()

@@ -1,0 +1,5 @@
+"""Reflex application package backed by the project-level modules."""
+
+from pathlib import Path
+
+__path__.append(str(Path(__file__).resolve().parent.parent))

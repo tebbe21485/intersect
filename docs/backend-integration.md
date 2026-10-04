@@ -35,7 +35,7 @@ Every write requires JSON, a recognized Origin and the CSRF token issued by `GET
 | `GET /api/admin` | Protected activities, group review and report queues |
 | `POST /api/admin/action` | Protected activity/group editing and moderation |
 
-Use production single-port mode (`reflex run --env prod --single-port`) for the simplest cookie/origin setup. Development mode requires separate frontend/API ports in Reflex 0.9.12. Its API origin is explicitly configured with `INTERSECT_API_URL` (browser adapter base URL) and `INTERSECT_ALLOWED_ORIGINS` (comma-separated frontend origins). These settings must be present before compilation/startup. No wildcard credentialed CORS is configured.
+Use production single-port mode (`reflex run --env prod --single-port`) for the simplest cookie/origin setup. Reflex Cloud may serve the frontend and backend on separate origins: the browser defaults to this deployment's Fly backend; a different `INTERSECT_API_URL` is used only when it is a non-local HTTPS URL. Set `INTERSECT_ALLOWED_ORIGINS` to the exact frontend origin in the backend environment. Credentialed cross-origin requests use Secure, SameSite=None cookies over HTTPS. No wildcard credentialed CORS is configured.
 
 ## View models and operations
 
