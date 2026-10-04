@@ -27,6 +27,8 @@ $env:INTERSECT_ALLOWED_ORIGINS="http://localhost:3000"
 .venv/Scripts/reflex.exe run --env dev --frontend-port 3000 --backend-port 8000
 ```
 
+Development hot reload watches `mule_hacks/`, `rxconfig.py`, and `assets/`. Database writes in `data/` do not trigger restarts. Restart the development command once after changing this watcher configuration. To capture startup or reload errors, append `--loglevel debug 2>&1 | Tee-Object -FilePath reflex.log` to the command.
+
 Reflex 0.9.12 supports single-port mode only in production. Development uses one frontend port and one API port against the same database. Keep the terminal open; stop with **Ctrl+C**. Refresh after editing static JavaScript/CSS assets. Production mode requires restarting after changes. Before switching back to single-port production, clear the development settings with `$env:INTERSECT_API_URL=""` and `$env:INTERSECT_ALLOWED_ORIGINS=""`. Run the complete app; `--frontend-only` cannot serve the database API.
 
 SQLite defaults to `data/intersect.sqlite3`. To use a different file, set `$env:INTERSECT_DB_PATH='data/event.sqlite3'` before both initialization and startup. `.env.example` documents settings; it is not loaded automatically. Database imports create no files. The explicit `init` command is repeat-safe; for a legacy database, it makes a timestamped backup and retains legacy tables before migration. To migrate an old `server.db`, explicitly select it with `INTERSECT_DB_PATH` first. No existing database is reset.

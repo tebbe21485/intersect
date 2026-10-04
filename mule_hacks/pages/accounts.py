@@ -82,8 +82,12 @@ def account_page(mode):
             ),
             *(
                 [
-                    link("Back to Intersect", href="/", class_name="text-link"),
                     button("Sign out", variant="secondary", id="logout-button"),
+                    link(
+                        "Back to Intersect",
+                        href="/",
+                        class_name="btn primary profile-back",
+                    ),
                 ]
                 if editing
                 else [

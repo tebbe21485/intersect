@@ -14,7 +14,7 @@
   --color-surface: color-mix(in srgb, var(--color-background) 40%, white);
   --color-secondary: color-mix(in srgb, var(--color-tan) 45%, var(--color-background));
   --color-border: var(--color-tan);
-  --color-blue-soft: color-mix(in srgb, var(--color-primary) 28%, var(--color-background));
+  --color-blue-soft: color-mix(in srgb, var(--color-primary) 55%, var(--color-background));
   --color-yellow-soft: color-mix(in srgb, var(--color-yellow) 48%, var(--color-background));
   --color-green-soft: color-mix(in srgb, var(--color-success) 25%, var(--color-background));
   --color-text-secondary: color-mix(in srgb, var(--color-text-muted) 65%, var(--color-text));

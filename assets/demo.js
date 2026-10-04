@@ -17,6 +17,8 @@
   const {createProvider} = await import('/services/provider.mjs');
   const {loadUiState, saveUiState} = await import('/services/ui-state.mjs');
   const ui = loadUiState();
+  const requestedQuestion = new URLSearchParams(location.search).get("question");
+  if (requestedQuestion) ui.dailyId = requestedQuestion;
   let data = null, provider = null, pending = false;
   let revision = 0, refreshing = false;
   const answerDrafts = new Map();
@@ -93,77 +95,89 @@
     if (previousFocus?.isConnected) previousFocus.focus();
   }
   function setActivity(key, focus = false) {
-    ui.activity = key;
+    ui.activity = ['daily', 'poll', 'challenge'].includes(key) ? key : 'daily';
     $$('[data-action="activity"]').forEach(tab => {
-      const selected = tab.dataset.activity === key;
+      const selected = tab.dataset.activity === ui.activity;
       tab.setAttribute('aria-selected', selected);
       tab.tabIndex = selected ? 0 : -1;
       const panel = $(`#panel-${tab.dataset.activity}`);
       if (panel) panel.hidden = !selected;
     });
-    if (focus) $(`#activity-${key}`)?.focus();
+    if (focus) $(`#activity-${ui.activity}`)?.focus();
     persist();
   }
+  // Keep the Reflex card design while giving every activity independent controls.
+  const dailyTemplate = $('#daily-cards > .card')?.cloneNode(true);
+  const pollTemplate = $('#poll-cards > .card')?.cloneNode(true);
+  function activityCard(template, id, kind) {
+    const card = template.cloneNode(true);
+    card.dataset[kind + 'Id'] = id;
+    card.querySelectorAll('[id]').forEach(el => {
+      el.dataset.field = el.id;
+      el.removeAttribute('id');
+    });
+    return card;
+  }
+  const field = (card, name) => card.querySelector(`[data-field="${name}"]`);
   function renderAnswer() {
-    $$('[data-action="similar-answer"]').forEach(el => { el.hidden = provider.capabilities.automaticMatching === false; });
-    if (!data.daily) {
-      if ($('#daily-question-title')) $('#daily-question-title').textContent = 'No active questions yet.';
-      if ($('#daily-form')) $('#daily-form').hidden = true;
-      if ($('#daily-selector')) $('#daily-selector').parentElement.hidden = true;
-      if ($('#daily-responses')) $('#daily-responses').innerHTML = '<p class="muted">An admin will publish questions here.</p>';
-      if ($('#your-answer-card')) $('#your-answer-card').hidden = true;
-      return;
+    const host = $('#daily-cards');
+    if (host && dailyTemplate) {
+      const focused = document.activeElement;
+      const focusedId = focused?.closest('[data-question-id]')?.dataset.questionId;
+      const selection = focused?.matches('textarea') ? [focused.selectionStart, focused.selectionEnd] : null;
+      host.replaceChildren(...data.dailyQuestions.map(question => {
+        const card = activityCard(dailyTemplate, question.id, 'question');
+        field(card, 'daily-question-title').textContent = question.text;
+        const form = field(card, 'daily-form');
+        form.dataset.questionId = question.id;
+        const input = field(card, 'daily-response');
+        input.id = `daily-response-${question.id}`;
+        form.querySelector('label').htmlFor = input.id;
+        input.value = answerDrafts.get(question.id) ?? question.answer;
+        input.disabled = question.status === 'closed';
+        form.querySelector('button[type="submit"]').disabled = question.status === 'closed';
+        field(card, 'daily-submit-label').textContent = question.status === 'closed' ? 'Question closed' : question.answer ? 'Update answer' : 'Share anonymously';
+        field(card, 'daily-explore').dataset.questionId = question.id;
+        return card;
+      }));
+      if (!data.dailyQuestions.length) host.innerHTML = '<section class="card daily-card"><h2>No active questions yet.</h2><p class="muted">An admin will publish questions here.</p></section>';
+      if (selection) {
+        const next = [...host.querySelectorAll('textarea')].find(el => el.closest('[data-question-id]').dataset.questionId === focusedId);
+        if (next) { next.focus({preventScroll:true}); next.setSelectionRange(...selection); }
+      }
     }
-    if ($('#daily-form')) $('#daily-form').hidden = false;
-    if ($('#daily-selector')) {
-      $('#daily-selector').parentElement.hidden = data.dailyQuestions.length < 2;
-      $('#daily-selector').innerHTML = data.dailyQuestions.map(q => `<option value="${escape(q.id)}" ${q.id === data.daily.id ? 'selected' : ''}>${escape(q.text)}${q.status === 'closed' ? ' (closed)' : ''}</option>`).join('');
+    if ($('#your-answer')) $('#your-answer').textContent = data.daily?.answer || '';
+    if ($('#your-answer-card')) $('#your-answer-card').hidden = !data.daily?.answer;
+    if ($('#daily-responses')) {
+      $('#daily-detail-question').textContent = data.daily?.text || (requestedQuestion ? 'This question is no longer available.' : 'No active questions yet.');
+      $('#daily-perspectives').hidden = !data.daily;
+      $('#daily-perspectives-title').textContent = 'A few different perspectives';
+      $('#daily-responses').innerHTML = data.daily?.responses.map(response => `<section class="card answer-card">
+        ${avatar(response.alias, response.color)}<div><strong>${escape(response.alias)}</strong><p>${escape(response.text)}</p><span class="tag">${escape(response.interest)}</span></div>
+        ${button(`Connect ${icon('arrow-right')}`, 'connect', `data-response-id="${escape(response.id)}"`, 'secondary')}</section>`).join('') || (data.daily?.answer
+          ? '<p class="muted">Your response is shared. Check back soon for other perspectives.</p>'
+          : '<p class="muted">No other responses yet. Share your perspective to get things started.</p>');
     }
-    if ($('#daily-question-title')) $('#daily-question-title').textContent = data.daily.text;
-    if ($('#daily-response')) {
-      $('#daily-response').value = answerDrafts.get(data.daily.id) ?? data.daily.answer;
-      $('#daily-response').disabled = data.daily.status === 'closed';
-      $('#daily-form button').disabled = data.daily.status === 'closed';
-    }
-    if ($('#daily-submit-label')) $('#daily-submit-label').textContent = data.daily.answer ? 'Update answer' : 'Share anonymously';
-    if ($('#submitted-answer')) {
-      $('#submitted-answer').textContent = `“${data.daily.answer}”`;
-      $('#submitted-answer').hidden = !data.daily.answer;
-    }
-    if ($('#your-answer')) $('#your-answer').textContent = data.daily.answer;
-    if ($('#your-answer-card')) $('#your-answer-card').hidden = !data.daily.answer;
-    if ($('#daily-responses')) $('#daily-responses').innerHTML = data.daily.responses.map(response => `<section class="card answer-card">
-      ${avatar(response.alias, response.color)}<div><strong>${escape(response.alias)}</strong><p>${escape(response.text)}</p><span class="tag">${escape(response.interest)}</span></div>
-      ${button(`Connect ${icon('arrow-right')}`, 'connect', `data-response-id="${escape(response.id)}"` , 'secondary')}</section>`).join('') || '<p class="muted">No other responses yet. Share your perspective to get things started.</p>';
     $$('[data-action="similar-answer"]').forEach(el => { el.hidden = provider.capabilities.automaticMatching === false; });
   }
   function renderPoll() {
-    if (!data.poll) {
-      if ($('#poll-title')) $('#poll-title').textContent = 'No active polls yet.';
-      if ($('#poll-options')) $('#poll-options').innerHTML = '';
-      if ($('#poll-note')) $('#poll-note').textContent = 'An admin will publish polls here.';
-      if ($('#poll-selector')) $('#poll-selector').parentElement.hidden = true;
-      if ($('#poll-match')) $('#poll-match').hidden = true;
-      return;
-    }
-    if ($('#poll-selector')) {
-      $('#poll-selector').parentElement.hidden = data.polls.length < 2;
-      $('#poll-selector').innerHTML = data.polls.map(p => `<option value="${escape(p.id)}" ${p.id === data.poll.id ? 'selected' : ''}>${escape(p.question)}${p.status === 'closed' ? ' (closed)' : ''}</option>`).join('');
-    }
-    if ($('#poll-title')) $('#poll-title').textContent = data.poll.question;
-    if ($('#poll-options')) $('#poll-options').innerHTML = data.poll.choices.map(choice => `<button type="button" class="poll-option" data-action="vote" data-choice="${escape(choice.id)}" data-percent="${choice.percent}" aria-pressed="false"><span class="poll-fill"></span><span class="relative flex items-center gap-3"><span class="radio"></span>${icon(choice.icon, 17)}${escape(choice.text)}</span><strong class="relative text-xs" hidden>${choice.percent}%</strong></button>`).join('');
-    $$('[data-action="vote"]').forEach(option => {
-      const selected = option.dataset.choice === data.poll.vote;
-      option.classList.toggle('selected', selected);
-      option.classList.toggle('voted', data.poll.vote !== null);
-      option.setAttribute('aria-pressed', selected);
-      option.querySelector('.poll-fill').style.width = data.poll.vote === null || data.poll.resultsPublic === false ? '0%' : `${option.dataset.percent}%`;
-      option.querySelector('strong').hidden = data.poll.vote === null || data.poll.resultsPublic === false;
-      option.querySelector('.radio').innerHTML = selected ? icon('check', 11) : '';
-      option.disabled = data.poll.status === 'closed';
-    });
-    if ($('#poll-note')) $('#poll-note').textContent = data.poll.resultsPublic === false ? (data.poll.vote ? 'Your vote is saved. Results are private.' : 'Results are private. Your choice stays anonymous.') : (data.poll.vote === null ? 'One choice. A little common ground.' : `${data.poll.totalVotes} votes`);
-    if ($('#poll-match')) $('#poll-match').hidden = data.poll.vote === null || provider.capabilities.automaticMatching === false;
+    const host = $('#poll-cards');
+    if (!host || !pollTemplate) return;
+    host.replaceChildren(...data.polls.map(poll => {
+      const card = activityCard(pollTemplate, poll.id, 'poll');
+      field(card, 'poll-title').textContent = poll.question;
+      field(card, 'poll-options').innerHTML = poll.choices.map(choice => {
+        const selected = choice.id === poll.vote;
+        const showResults = poll.vote !== null && poll.resultsPublic !== false;
+        return `<button type="button" class="poll-option ${selected ? 'selected' : ''} ${poll.vote !== null ? 'voted' : ''}" data-action="vote" data-poll-id="${escape(poll.id)}" data-choice="${escape(choice.id)}" aria-pressed="${selected}" ${poll.status === 'closed' ? 'disabled' : ''}><span class="poll-fill" style="width:${showResults ? choice.percent : 0}%"></span><span class="relative flex items-center gap-3"><span class="radio">${selected ? icon('check',11) : ''}</span>${icon(choice.icon,17)}${escape(choice.text)}</span><strong class="relative text-xs" ${showResults ? '' : 'hidden'}>${choice.percent}%</strong></button>`;
+      }).join('');
+      field(card, 'poll-note').textContent = poll.status === 'closed' ? 'This poll is closed.' : poll.resultsPublic === false ? (poll.vote ? 'Your vote is saved. Results are private.' : 'Results are private. Your choice stays anonymous.') : (poll.vote === null ? 'One choice. A little common ground.' : `${poll.totalVotes} votes`);
+      const match = field(card, 'poll-match');
+      match.dataset.pollId = poll.id;
+      match.hidden = poll.vote === null || provider.capabilities.automaticMatching === false;
+      return card;
+    }));
+    if (!data.polls.length) host.innerHTML = '<section class="card poll-card"><h3>No active polls yet.</h3><p class="muted">An admin will publish polls here.</p></section>';
   }
   function updateCounts() { $$('[data-connection-count]').forEach(el => { el.textContent = data.connections.length; }); }
   function renderChallenge() {
@@ -284,8 +298,9 @@
     if (!data || pending) return;
     switch (d.action) {
       case 'activity': setActivity(d.activity); break;
-      case 'vote': runOperation(async () => { data.poll = await provider.voteOnPoll({pollId: data.poll.id, choiceId: d.choice}); data.polls = replaceRecord(data.polls, data.poll); renderPoll(); }); break;
-      case 'poll-match': if (data.poll.vote !== null) runOperation(() => connect({kind: 'poll', pollId: data.poll.id})); break;
+      case 'vote': runOperation(async () => { const poll = await provider.voteOnPoll({pollId: d.pollId, choiceId: d.choice}); data.polls = replaceRecord(data.polls, poll); selectActivities(); renderPoll(); }); break;
+      case 'poll-match': if (data.polls.find(p => p.id === d.pollId)?.vote != null) runOperation(() => connect({kind: 'poll', pollId: d.pollId})); break;
+      case 'explore-responses': ui.dailyId = d.questionId; persist(); location.assign(`/daily?question=${encodeURIComponent(d.questionId)}`); break;
       case 'similar-answer': runOperation(() => connect({kind: 'similar-answer', questionId: data.daily.id})); break;
       case 'connect': runOperation(() => connect(d.questionId ? {kind: 'question-response', questionId: d.questionId, responseId: d.responseId} : {kind: 'daily-answer', questionId: data.daily.id, responseId: d.responseId})); break;
       case 'open-chat': openChat(d.id); break;
@@ -328,7 +343,7 @@
     switch (form.dataset.form) {
       case 'daily':
         if (!value('answer')) return;
-        runOperation(async () => { data.daily = await provider.saveDailyAnswer({questionId: data.daily.id, text: value('answer')}); data.dailyQuestions = replaceRecord(data.dailyQuestions,data.daily); answerDrafts.delete(data.daily.id); renderAnswer(); notify('Your answer has been shared anonymously.'); }); break;
+        runOperation(async () => { const question = await provider.saveDailyAnswer({questionId: form.dataset.questionId, text: value('answer')}); data.dailyQuestions = replaceRecord(data.dailyQuestions,question); answerDrafts.delete(question.id); selectActivities(); renderAnswer(); notify('Your answer has been shared anonymously.'); }); break;
       case 'message':
         if (!value('message') || !active()) return;
         form.dataset.requestId ||= newRequestId();
@@ -350,12 +365,10 @@
   document.addEventListener('input', event => {
     if (event.target.matches('[data-form="message"] input')) $('[data-form="message"] button').disabled = !event.target.value.trim();
     if (event.target.closest('[data-form="message"], [data-form="group"]')) delete event.target.closest('form').dataset.requestId;
-    if (event.target.id === 'daily-response' && data?.daily) answerDrafts.set(data.daily.id,event.target.value);
+    if (event.target.matches('[data-field="daily-response"]') && data) answerDrafts.set(event.target.closest('form').dataset.questionId,event.target.value);
   });
   document.addEventListener('change', event => {
     if (event.target.id === 'community') { ui.community = event.target.value; persist(); }
-    if (event.target.id === 'daily-selector') { ui.dailyId = event.target.value; selectActivities(); renderAnswer(); persist(); revision++; }
-    if (event.target.id === 'poll-selector') { ui.pollId = event.target.value; selectActivities(); renderPoll(); persist(); revision++; }
   });
   document.addEventListener('keydown', event => {
     if (!event.target.matches('[data-action="activity"]')) return;
@@ -413,7 +426,9 @@
   function selectActivities() {
     data.dailyQuestions ||= data.daily ? [data.daily] : [];
     data.polls ||= data.poll ? [data.poll] : [];
-    data.daily = data.dailyQuestions.find(q => q.id === ui.dailyId) || data.dailyQuestions[0] || null;
+    data.daily = requestedQuestion && $('#daily-detail-question')
+      ? data.dailyQuestions.find(q => q.id === requestedQuestion) || null
+      : data.dailyQuestions.find(q => q.id === ui.dailyId) || data.dailyQuestions[0] || null;
     data.poll = data.polls.find(p => p.id === ui.pollId) || data.polls[0] || null;
     ui.dailyId = data.daily?.id; ui.pollId = data.poll?.id;
   }
@@ -457,8 +472,8 @@
         connection.incremental = false;
       }
       data = next; selectActivities();
-      if (JSON.stringify(previous.daily) !== JSON.stringify(data.daily)) renderAnswer();
-      if (JSON.stringify(previous.poll) !== JSON.stringify(data.poll)) renderPoll();
+      if (JSON.stringify(previous.dailyQuestions) !== JSON.stringify(data.dailyQuestions)) renderAnswer();
+      if (JSON.stringify(previous.polls) !== JSON.stringify(data.polls)) renderPoll();
       if (JSON.stringify(previous.connections) !== JSON.stringify(data.connections)) { renderConnections(); renderChat(true); updateCounts(); }
       if (JSON.stringify(previous.groups) !== JSON.stringify(data.groups) || JSON.stringify(previous.groupProposals) !== JSON.stringify(data.groupProposals)) renderGroups();
       if (JSON.stringify(previous.questions) !== JSON.stringify(data.questions)) renderQuestions();

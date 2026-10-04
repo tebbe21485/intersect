@@ -1,21 +1,26 @@
 import reflex as rx
 
-from ..components.activities import daily_card
 from ..components.layout import shell
-from ..components.ui import avatar, button, card, icon, page_title
+from ..components.ui import avatar, button, card, icon, link
 
 
 def daily():
     return shell(
         "daily",
-        page_title(
-            "A small question. A world of perspectives.",
-            "Share a little of what makes you, you.",
+        link(
+            icon("arrow-left", 16),
+            "Go back",
+            href="/",
+            class_name="btn secondary daily-back",
         ),
-        daily_card(expanded=True),
+        card(
+            rx.el.span("Daily question", class_name="section-label"),
+            rx.el.h2("Loading question...", id="daily-detail-question"),
+            class_name="daily-card question-detail",
+        ),
         rx.el.section(
             rx.el.div(
-                rx.el.h2("A few different perspectives"),
+                rx.el.h2("A few different perspectives", id="daily-perspectives-title"),
                 rx.el.span("Always anonymous", class_name="muted text-sm"),
                 class_name="section-heading",
             ),
@@ -43,5 +48,6 @@ def daily():
                 rx.el.p("Loading responses…", class_name="muted"), id="daily-responses"
             ),
             class_name="mt-8",
+            id="daily-perspectives",
         ),
     )
