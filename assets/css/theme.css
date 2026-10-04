@@ -1,0 +1,27 @@
+﻿/* Intersect: edit these eight base colors to retheme the site. */
+:root {
+  color-scheme: light;
+  --color-primary: #6faed9;
+  --color-deep-blue: #3e6f8f;
+  --color-yellow: #f4c95d;
+  --color-background: #f8f4ea;
+  --color-tan: #e9dfc8;
+  --color-text: #20292e;
+  --color-text-muted: #445057;
+  --color-success: #7fb685;
+
+  /* Shared shades derived from the palette, rather than per-component colors. */
+  --color-surface: color-mix(in srgb, var(--color-background) 40%, white);
+  --color-secondary: color-mix(in srgb, var(--color-tan) 45%, var(--color-background));
+  --color-border: var(--color-tan);
+  --color-blue-soft: color-mix(in srgb, var(--color-primary) 28%, var(--color-background));
+  --color-yellow-soft: color-mix(in srgb, var(--color-yellow) 48%, var(--color-background));
+  --color-green-soft: color-mix(in srgb, var(--color-success) 25%, var(--color-background));
+  --color-text-secondary: color-mix(in srgb, var(--color-text-muted) 65%, var(--color-text));
+  --color-deep-blue-hover: color-mix(in srgb, var(--color-deep-blue) 85%, var(--color-text));
+  --color-success-text: color-mix(in srgb, var(--color-success) 40%, var(--color-text));
+  --color-shadow: color-mix(in srgb, var(--color-text) 12%, transparent);
+  --color-backdrop: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+

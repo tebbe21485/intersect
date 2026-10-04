@@ -4,7 +4,6 @@ config = rx.Config(
     app_name="mule_hacks",
     plugins=[
         rx.plugins.SitemapPlugin(),
-        rx.plugins.TailwindV4Plugin(),
-        rx.plugins.RadixThemesPlugin(),
-    ]
+    ],
+    disable_plugins=[rx.plugins.TailwindV4Plugin, rx.plugins.RadixThemesPlugin],
 )

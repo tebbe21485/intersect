@@ -1,0 +1,22 @@
+/* Adaptations for semantic Reflex HTML and the browser-local demo. */
+[hidden] { display: none !important; }
+a[aria-label="Built with Reflex"] { display: none !important; }
+.activity-tabs button:focus-visible, .filter-tabs button:focus-visible { outline: 2px solid var(--color-deep-blue); outline-offset: 4px; }
+.question-heading > .page-title { flex: 1; }
+.question-heading > .btn { flex-shrink: 0; }
+.question-row { text-align: left; width: 100%; }
+.modal:not([open]) { display: none; }
+.modal-content { width: 100%; }
+#modal-body { margin-top: 20px; }
+#chat-content { display: contents; }
+.chat-messages { scroll-behavior: smooth; }
+.progress-track #challenge-progress { width: 0; }
+.bottom-nav a { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 6px 0; font-size: 12px; color: var(--color-text-secondary); }
+.bottom-nav a.active { color: var(--color-deep-blue); }
+.empty .btn { margin-top: 20px; }
+.data-status { position: fixed; top: 16px; right: 16px; z-index: 60; display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 32px); padding: 16px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); box-shadow: 0 4px 20px var(--color-shadow); }
+@media (max-width: 640px) {
+  .question-heading { flex-direction: column; margin-bottom: 24px; }
+  .question-heading > .page-title { margin-bottom: 0; }
+  .welcome footer { flex-wrap: wrap; }
+}

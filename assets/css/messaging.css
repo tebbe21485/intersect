@@ -1,0 +1,334 @@
+/* Messages replaces the app navigation with a conversation sidebar. */
+.messaging-mode .conversations-sidebar {
+  width: 300px;
+  padding: 28px 18px;
+}
+.messaging-mode .workspace {
+  margin-left: 300px;
+}
+.messaging-mode .topbar,
+.messaging-mode .bottom-nav {
+  display: none;
+}
+.messaging-mode .messages-page {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+.messaging-mode .messaging-layout {
+  display: block;
+}
+.sidebar-back {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 12px;
+  color: var(--color-deep-blue);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  font-size: 15px;
+}
+.sidebar-back:hover {
+  background: var(--color-blue-soft);
+}
+.conversation-list-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 30px 12px 8px;
+}
+.conversation-list-heading h1 {
+  font-size: 30px;
+}
+.conversation-list-heading .count {
+  width: 26px;
+  height: 26px;
+  font-size: 14px;
+}
+.conversation-list-intro {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  margin: 0 12px 24px;
+}
+.conversations-sidebar .conversation-list {
+  margin: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  gap: 8px;
+}
+.conversation-list .message-list-row {
+  width: 100%;
+  padding: 16px 12px;
+  gap: 12px;
+  border: 1px solid transparent;
+}
+.conversation-list .message-list-row:hover {
+  background: var(--color-secondary);
+}
+.conversation-list .message-list-row.active {
+  background: var(--color-blue-soft);
+  border-color: var(--color-primary);
+}
+.conversation-list-copy {
+  display: block;
+  min-width: 0;
+  flex: 1;
+}
+.conversation-list-copy strong {
+  display: block;
+  font-size: 17px;
+}
+.conversation-list-copy > span {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  margin-top: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.conversation-sidebar-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-top: 1px solid var(--color-border);
+  padding: 20px 12px 0;
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+.conversation-sidebar-note svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.messaging-mode .chat-card {
+  display: flex;
+  height: 100dvh;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+.messaging-mode .chat-header {
+  padding: 24px 40px;
+  flex-shrink: 0;
+}
+.messaging-mode .chat-header h3 {
+  font-size: 23px;
+}
+.messaging-mode .chat-header .avatar {
+  width: 46px;
+  height: 46px;
+  font-size: 19px;
+}
+.messaging-mode .chat-context {
+  padding: 16px 40px;
+  flex-shrink: 0;
+}
+.messaging-mode .chat-context svg {
+  flex-shrink: 0;
+}
+.messaging-mode .chat-messages {
+  min-height: 0;
+  flex: 1;
+  max-height: none;
+  padding: 32px 40px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.messaging-mode .message {
+  max-width: min(75%, 700px);
+}
+.messaging-mode .chat-bottom {
+  flex-shrink: 0;
+  padding: 20px 40px 28px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.starter-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+.messaging-mode .starter-row {
+  margin: 8px 0 18px;
+}
+.messaging-mode .starter-chip {
+  display: inline-flex;
+  align-items: stretch;
+  width: auto;
+  border: 1px solid var(--color-primary);
+  background: var(--color-blue-soft);
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 0;
+}
+.messaging-mode .starter-chip button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-deep-blue);
+  font-size: 14px;
+  padding: 10px 12px;
+  text-align: left;
+}
+.messaging-mode .starter-chip button:hover {
+  background: color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+.messaging-mode .starter-chip .starter-dismiss {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  border-left: 1px solid var(--color-primary);
+  flex-shrink: 0;
+}
+.suggestion-toggle {
+  color: var(--color-deep-blue);
+  font-size: 14px;
+  padding: 6px 0;
+  margin-bottom: 12px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.messaging-mode .message-form input {
+  min-height: 56px;
+}
+.messaging-mode .message-form .btn {
+  min-width: 56px;
+  min-height: 56px;
+}
+.messaging-mode .chat-controls {
+  justify-content: flex-start;
+  gap: 12px;
+  padding-top: 18px;
+  margin-top: 0;
+}
+.messaging-mode .chat-controls .chat-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 11px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-deep-blue);
+  border: 1px solid var(--color-deep-blue);
+  border-radius: 10px;
+  background: var(--color-surface);
+  transition:
+    background 0.15s,
+    transform 0.15s;
+}
+.messaging-mode .chat-controls .chat-action:hover {
+  background: var(--color-blue-soft);
+  transform: translateY(-1px);
+}
+.messaging-mode .chat-controls .unlock-action {
+  background: var(--color-yellow-soft);
+}
+.messaging-mode .chat-controls .unlock-action:hover {
+  background: var(--color-yellow);
+}
+.chat-action svg {
+  flex-shrink: 0;
+}
+@media (max-width: 1000px) {
+  .messaging-mode .conversations-sidebar {
+    width: 260px;
+    padding: 22px 12px;
+  }
+  .messaging-mode .workspace {
+    margin-left: 260px;
+  }
+  .messaging-mode .chat-header,
+  .messaging-mode .chat-context,
+  .messaging-mode .chat-messages {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  .messaging-mode .chat-bottom {
+    padding: 16px 24px 22px;
+  }
+}
+@media (min-width: 641px) {
+  .messaging-mode .mobile-back {
+    display: none;
+  }
+}
+@media (max-width: 640px) {
+  .messaging-mode .workspace {
+    margin-left: 0;
+  }
+  .messaging-mode .conversations-sidebar {
+    display: flex;
+    position: fixed;
+    width: 100%;
+    height: 100dvh;
+    padding: 24px 18px;
+  }
+  .messaging-mode.has-active-chat .conversations-sidebar {
+    display: none;
+  }
+  .messaging-mode:not(.has-active-chat) .workspace {
+    display: none;
+  }
+  .messaging-mode .mobile-back {
+    display: inline-flex;
+  }
+  .messaging-mode .chat-header {
+    padding: 16px;
+    gap: 10px;
+  }
+  .messaging-mode .chat-header h3 {
+    font-size: 20px;
+  }
+  .messaging-mode .chat-context {
+    padding: 12px 18px;
+    font-size: 13px;
+  }
+  .messaging-mode .chat-messages {
+    padding: 20px 18px;
+  }
+  .messaging-mode .message {
+    max-width: 95%;
+  }
+  .messaging-mode .chat-bottom {
+    padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+  }
+  .messaging-mode .chat-controls {
+    gap: 8px;
+    padding-top: 12px;
+  }
+  .messaging-mode .chat-controls .chat-action {
+    font-size: 13px;
+    padding: 10px 12px;
+    min-height: 44px;
+  }
+  .messaging-mode .starter-row {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .messaging-mode .starter-chip {
+    max-width: 100%;
+  }
+  .messaging-mode .starter-chip button {
+    font-size: 13px;
+  }
+}
+@media (max-height: 650px) and (max-width: 640px) {
+  .messaging-mode .chat-card {
+    height: auto;
+    min-height: 100dvh;
+  }
+  .messaging-mode .chat-messages {
+    flex: none;
+    max-height: 45dvh;
+    min-height: 150px;
+  }
+}

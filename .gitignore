@@ -4,3 +4,15 @@ __pycache__/
 assets/external/
 *.py[cod]
 .states
+.venv/
+reflex.log
+*.log
+data/
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.db-*
+.env
+.env.*
+!.env.example

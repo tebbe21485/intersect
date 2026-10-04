@@ -1,0 +1,641 @@
+/* Spacious page layouts and a shared, readable type hierarchy. */
+:root {
+  font-size: 16px;
+  line-height: 1.6;
+}
+h1,
+h2,
+h3 {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+h1 {
+  font-size: 44px;
+  line-height: 1.15;
+}
+h2 {
+  font-size: 34px;
+  line-height: 1.25;
+}
+h3 {
+  font-size: 24px;
+}
+.muted {
+  color: var(--color-text-secondary);
+}
+.text-sm {
+  font-size: 16px;
+}
+.text-xs {
+  font-size: 14px;
+}
+.sidebar {
+  width: 240px;
+  padding: 38px 24px 28px;
+}
+.workspace {
+  margin-left: 240px;
+}
+.sidebar nav {
+  margin-top: 48px;
+  gap: 14px;
+}
+.nav-item {
+  min-height: 52px;
+  font-size: 16px;
+}
+.sidebar-community {
+  margin-top: auto;
+}
+.sidebar-community select {
+  max-width: 154px;
+  font-size: 13px;
+  padding: 8px 0;
+}
+.sidebar-bottom {
+  font-size: 13px;
+  margin-top: 16px;
+}
+.sidebar-bottom br {
+  display: none;
+}
+.topbar {
+  height: 64px;
+  max-width: 1220px;
+  margin: auto;
+  padding: 0 56px;
+}
+.main-content {
+  max-width: 1220px;
+  padding: 16px 56px 64px;
+}
+.page-title {
+  margin-bottom: 32px;
+}
+.page-title h1 {
+  font-size: 44px;
+  max-width: none;
+}
+.page-title p {
+  font-size: 18px;
+  margin-top: 16px;
+  max-width: 740px;
+  line-height: 1.7;
+}
+.btn {
+  min-height: 50px;
+  padding: 13px 22px;
+  font-size: 16px;
+}
+.text-link {
+  font-size: 16px;
+}
+.card {
+  padding: 32px;
+  box-shadow: none;
+}
+.section-label {
+  font-size: 14px;
+}
+.section-heading {
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.activity-tabs {
+  display: flex;
+  gap: 36px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--color-border);
+}
+.activity-tabs button {
+  padding: 14px 4px;
+  font-size: 17px;
+  color: var(--color-text-secondary);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.activity-tabs button[aria-selected='true'] {
+  color: var(--color-deep-blue);
+  border-color: var(--color-deep-blue);
+  font-weight: 600;
+}
+.activity-panel {
+  min-height: 350px;
+}
+.daily-card {
+  padding: 34px 38px;
+  min-height: 350px;
+}
+.daily-content {
+  max-width: 65%;
+}
+.daily-card h2 {
+  font-size: 36px;
+  max-width: 580px;
+  margin: 18px 0 26px;
+}
+.daily-card .conversation-art {
+  right: 44px;
+  top: 65px;
+  transform: scale(1.15);
+  opacity: 1;
+}
+.daily-card .daily-footer {
+  padding-top: 20px;
+  margin-top: 28px;
+  font-size: 14px;
+  border-color: color-mix(in srgb, var(--color-deep-blue) 20%, transparent);
+  align-items: center;
+}
+.privacy-note {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.daily-card .submitted-answer {
+  font-size: 17px;
+  max-width: 520px;
+}
+.challenge-card {
+  padding: 38px;
+  min-height: 350px;
+}
+.challenge-card h2 {
+  font-size: 36px;
+  margin-top: 20px;
+}
+.challenge-card p {
+  max-width: 650px;
+  font-size: 18px;
+  line-height: 1.7;
+}
+.challenge-card .progress-row {
+  max-width: 620px;
+  margin: 30px 0;
+  font-size: 14px;
+}
+.poll-card {
+  min-height: 350px;
+  padding: 34px 38px;
+}
+.poll-card h3 {
+  font-size: 30px;
+  margin: 12px 0 24px;
+}
+.poll-options {
+  gap: 12px;
+  max-width: 760px;
+}
+.poll-option {
+  font-size: 16px;
+  padding: 15px 18px;
+  min-height: 56px;
+}
+.poll-option .radio {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.poll-footer {
+  margin-top: 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.discovery-directory {
+  margin-top: 44px;
+}
+.discovery-directory h2 {
+  margin-bottom: 16px;
+}
+.destination-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 20px 8px;
+  width: 100%;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+.destination-row:last-child {
+  border-bottom: 0;
+}
+.destination-row:hover {
+  background: var(--color-secondary);
+  border-radius: 12px;
+}
+.destination-icon {
+  color: var(--color-deep-blue);
+  flex-shrink: 0;
+}
+.destination-row > span {
+  flex: 1;
+  min-width: 0;
+}
+.destination-row strong {
+  display: block;
+  font-family: Georgia, serif;
+  font-size: 23px;
+  font-weight: 600;
+}
+.destination-row span span {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: 17px;
+  margin-top: 3px;
+}
+.connections-grid,
+.question-list {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 900px;
+  gap: 28px;
+}
+.connection-card .shared-answer {
+  padding: 22px 0;
+}
+.connection-card .shared-answer p {
+  font-size: 19px;
+}
+.connection-card > .btn {
+  width: auto;
+}
+.tag {
+  font-size: 13px;
+  padding: 5px 11px;
+}
+.answer-card {
+  padding: 28px;
+  margin-bottom: 24px;
+}
+.answer-card strong {
+  font-size: 17px;
+}
+.answer-card p {
+  font-size: 18px;
+  line-height: 1.75;
+}
+.groups-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 22px;
+  max-width: 900px;
+}
+.group-tile.detailed {
+  padding: 30px;
+  gap: 24px;
+  min-height: 150px;
+}
+.detailed strong {
+  font-size: 22px;
+}
+.detailed .group-description {
+  font-size: 17px;
+}
+.detailed .group-size {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.group-guidance p {
+  font-size: 17px;
+}
+.filter-tabs {
+  margin-bottom: 32px;
+  gap: 10px;
+}
+.filter-tabs button {
+  font-size: 16px;
+  padding: 12px 18px;
+}
+.question-row {
+  padding: 30px 32px;
+}
+.question-row h3 {
+  font-size: 26px;
+  margin: 20px 0 14px;
+}
+.question-row > p {
+  font-size: 17px;
+  line-height: 1.75;
+  max-width: 700px;
+}
+.messages-page {
+  max-width: 1400px;
+}
+.messaging-layout {
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 24px;
+}
+.message-list {
+  padding: 24px 14px;
+}
+.message-list-row {
+  gap: 12px;
+  padding: 17px 12px;
+}
+.message-list-row strong {
+  font-size: 16px;
+}
+.message-list-row p {
+  font-size: 14px;
+  max-width: 165px;
+}
+.chat-card {
+  padding: 0;
+  min-height: 680px;
+}
+.chat-header {
+  padding: 24px;
+}
+.chat-header h3 {
+  font-family: inherit;
+  font-size: 19px;
+}
+.chat-context {
+  font-size: 14px;
+  line-height: 1.65;
+  padding: 16px 24px;
+}
+.chat-messages {
+  padding: 24px;
+  max-height: 430px;
+}
+.message {
+  max-width: 85%;
+}
+.message p {
+  font-size: 17px;
+  line-height: 1.7;
+  padding: 16px 18px;
+}
+.message span {
+  font-size: 13px;
+}
+.chat-bottom {
+  padding: 0 24px 22px;
+}
+.starter-row {
+  gap: 10px;
+}
+.starter-row > span {
+  font-size: 14px;
+}
+.starter-row button {
+  font-size: 14px;
+  padding: 9px 13px;
+}
+.message-form input {
+  font-size: 16px;
+  min-height: 50px;
+}
+.chat-controls {
+  row-gap: 15px;
+}
+.chat-controls button {
+  font-size: 13px;
+}
+.modal {
+  max-width: 640px;
+}
+.modal h2 {
+  font-size: 30px;
+}
+.modal-content {
+  padding: 36px;
+}
+.form-stack label {
+  font-size: 16px;
+}
+.form-stack input,
+.form-stack select,
+textarea {
+  font-size: 16px;
+}
+.board-response p {
+  font-size: 17px;
+}
+.consent-row {
+  font-size: 15px;
+}
+.waiting-state,
+.revealed-card p {
+  font-size: 16px;
+}
+.revealed-card span,
+.demo-control p {
+  font-size: 14px;
+}
+.toast {
+  font-size: 15px;
+}
+@media (max-width: 1100px) {
+  .main-content {
+    padding: 16px 36px 56px;
+  }
+  .topbar {
+    padding: 0 36px;
+  }
+  .page-title h1 {
+    font-size: 38px;
+  }
+  .daily-card .conversation-art {
+    right: 12px;
+    transform: scale(0.9);
+  }
+  .messaging-layout {
+    grid-template-columns: 230px minmax(0, 1fr);
+  }
+  .message-list-row p {
+    max-width: 120px;
+  }
+}
+@media (max-width: 850px) {
+  .sidebar {
+    width: 200px;
+    padding: 28px 16px;
+  }
+  .workspace {
+    margin-left: 200px;
+  }
+  .sidebar .brand {
+    font-size: 24px;
+  }
+  .sidebar-community {
+    flex-wrap: wrap;
+  }
+  .daily-content {
+    max-width: 100%;
+  }
+  .daily-card .conversation-art {
+    display: none;
+  }
+  .daily-card h2,
+  .challenge-card h2 {
+    font-size: 32px;
+  }
+  .daily-card .daily-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .messaging-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .destination-row {
+    gap: 18px;
+  }
+}
+@media (max-width: 640px) {
+  .sidebar {
+    display: none;
+  }
+  .workspace {
+    margin-left: 0;
+  }
+  .topbar {
+    height: 78px;
+    padding: 0 24px;
+  }
+  .main-content {
+    padding: 20px 24px 110px;
+  }
+  .page-title {
+    margin-bottom: 28px;
+  }
+  .page-title h1 {
+    font-size: 34px;
+    max-width: none;
+  }
+  .page-title p {
+    font-size: 17px;
+    max-width: none;
+    margin-top: 14px;
+  }
+  .activity-tabs {
+    gap: 0;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .activity-tabs button {
+    font-size: 15px;
+    padding: 12px 2px;
+  }
+  .activity-panel {
+    min-height: 0;
+  }
+  .daily-card,
+  .challenge-card,
+  .poll-card {
+    padding: 28px 24px;
+    min-height: 0 !important;
+  }
+  .daily-card h2,
+  .challenge-card h2 {
+    font-size: 30px;
+    max-width: none;
+  }
+  .daily-card .daily-footer {
+    margin-top: 28px;
+    padding-top: 20px;
+  }
+  .daily-card .btn {
+    max-width: none;
+  }
+  .poll-card h3 {
+    font-size: 26px;
+  }
+  .poll-option {
+    padding: 14px 12px;
+    font-size: 16px;
+  }
+  .poll-option > span.relative {
+    gap: 9px;
+  }
+  .poll-option svg {
+    flex-shrink: 0;
+  }
+  .discovery-directory {
+    margin-top: 36px;
+  }
+  .discovery-directory h2 {
+    font-size: 28px;
+  }
+  .destination-row {
+    padding: 24px 0;
+    gap: 14px;
+  }
+  .destination-row strong {
+    font-size: 21px;
+  }
+  .destination-row span span {
+    font-size: 16px;
+  }
+  .destination-icon {
+    width: 25px;
+  }
+  .bottom-nav button {
+    font-size: 12px;
+    gap: 7px;
+  }
+  .question-row,
+  .connection-card,
+  .answer-card {
+    padding: 24px;
+  }
+  .question-row h3 {
+    font-size: 25px;
+  }
+  .answer-card > div {
+    min-width: calc(100% - 70px);
+  }
+  .answer-card .btn {
+    margin-left: 0;
+  }
+  .group-tile.detailed {
+    padding: 24px 18px;
+    gap: 16px;
+  }
+  .detailed .group-icon {
+    width: 46px;
+    height: 46px;
+  }
+  .group-tile.detailed strong {
+    font-size: 21px;
+  }
+  .detailed .group-size {
+    max-width: none;
+    font-size: 14px;
+  }
+  .chat-header {
+    padding: 20px 16px;
+  }
+  .chat-context {
+    padding: 14px 16px;
+  }
+  .chat-messages {
+    padding: 20px 16px;
+    max-height: 50dvh;
+  }
+  .message {
+    max-width: 95%;
+  }
+  .message p {
+    font-size: 16px;
+  }
+  .chat-bottom {
+    padding: 0 16px 24px;
+  }
+  .chat-controls {
+    gap: 18px;
+  }
+  .chat-controls button {
+    font-size: 13px;
+  }
+  .modal-content {
+    padding: 30px 24px;
+  }
+  .modal h2 {
+    font-size: 28px;
+  }
+  .consent-row {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
